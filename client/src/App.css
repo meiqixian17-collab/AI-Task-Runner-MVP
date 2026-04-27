@@ -338,14 +338,30 @@ h2 {
   line-height: 22px;
 }
 
-.task-list-content span {
-  display: -webkit-box;
-  overflow: hidden;
+.task-list-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
   color: var(--color-text-secondary);
   font-size: 13px;
   line-height: 20px;
+}
+
+.task-list-summary {
+  display: -webkit-box;
+  overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.task-list-time {
+  align-self: end;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+  white-space: nowrap;
 }
 
 .modal-scrim {

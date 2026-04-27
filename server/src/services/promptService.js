@@ -65,6 +65,8 @@ Completed steps:
 
 ${formatStepHistory(context.stepHistory)}
 
+${formatDuplicateRetryContext(context)}
+
 Based on the original task and completed steps, generate the next single action the user should execute right now.
 
 Rules:
@@ -77,6 +79,7 @@ Rules:
 7. Do not explain theory or provide a long plan.
 8. If the task is complete, start with [TASK_DONE] and briefly say it is complete.
 9. Respond in the same language as the user's task.
+10. When duplicate retry context is present, continue from the previous completed step. The new action must feel like the next natural task-progress step, not a generic fallback or restart.
 
 Return the same JSON shape as generate-first-step.
 `.trim();
@@ -101,7 +104,10 @@ function normalizeGenerationInput(input) {
     clarificationAnswer: String(input?.clarificationAnswer || "").trim(),
     stepHistory: Array.isArray(input?.stepHistory)
       ? input.stepHistory.map((step) => getReadableStepText(step)).filter(Boolean)
-      : []
+      : [],
+    retryReason: String(input?.retryReason || "").trim(),
+    rejectedStep: getReadableStepText(input?.rejectedStep),
+    previousStep: getReadableStepText(input?.previousStep)
   };
 }
 
@@ -111,6 +117,22 @@ function formatStepHistory(stepHistory) {
   }
 
   return stepHistory.map((step, index) => `${index + 1}. ${step}`).join("\n");
+}
+
+function formatDuplicateRetryContext(context) {
+  if (context.retryReason !== "duplicate_step") {
+    return "";
+  }
+
+  return `
+Duplicate retry context:
+- The previous model output was rejected because it repeated an already completed step.
+- Rejected duplicate step: ${context.rejectedStep || "Unknown"}
+- Previous completed step to continue from: ${context.previousStep || "Unknown"}
+
+Retry instruction:
+Generate a new action step that directly continues from the previous completed step. Preserve the user's original task and current task context. Do not restart the task. Do not output a generic fallback such as opening related tools, writing the smallest action, clarifying goals, or making a plan. The user should feel the task is continuing smoothly.
+`.trim();
 }
 
 function getReadableStepText(value) {

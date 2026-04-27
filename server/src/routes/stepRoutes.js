@@ -73,7 +73,15 @@ router.post("/generate-first-step", async (req, res) => {
 
 router.post("/generate-next-step", async (req, res) => {
   try {
-    const { task, taskContext, clarificationAnswer, stepHistory } = req.body;
+    const {
+      task,
+      taskContext,
+      clarificationAnswer,
+      stepHistory,
+      retryReason,
+      rejectedStep,
+      previousStep
+    } = req.body;
 
     if (!task || typeof task !== "string") {
       return res.status(400).json({
@@ -91,7 +99,10 @@ router.post("/generate-next-step", async (req, res) => {
       task,
       taskContext,
       clarificationAnswer,
-      stepHistory
+      stepHistory,
+      retryReason,
+      rejectedStep,
+      previousStep
     });
     const aiText = await callDeepSeek(prompt);
 

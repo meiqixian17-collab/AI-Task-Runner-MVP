@@ -622,7 +622,15 @@ function MyTasksPage({
                       )}
                       {task.title || "未命名任务"}
                     </strong>
-                    <span>{detail}</span>
+                    <span className="task-list-detail">
+                      <span className="task-list-summary">{detail.summary}</span>
+                      <time
+                        className="task-list-time"
+                        dateTime={task.updatedAt}
+                      >
+                        {detail.timeText}
+                      </time>
+                    </span>
                   </span>
                 </button>
               );
@@ -828,9 +836,9 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
           stepHistory: []
         })
       );
-      applyGeneratedStep(data, trimmedTask);
+      await applyGeneratedStep(data, trimmedTask, []);
     } catch (error) {
-      applyFallbackStep(trimmedTask, error);
+      applyFallbackStep(trimmedTask, error, []);
     }
   }
 
@@ -927,9 +935,9 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
         }),
         nextHistory
       );
-      applyGeneratedStep(data, taskInput);
+      await applyGeneratedStep(data, taskInput, nextHistory);
     } catch (error) {
-      applyFallbackStep(taskInput, error);
+      applyFallbackStep(taskInput, error, nextHistory);
     }
   }
 
@@ -1014,28 +1022,64 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
           ? await generateFirstStep(generationPayload)
           : await generateNextStep(generationPayload, stepHistory);
 
-      applyGeneratedStep(data, taskInput);
+      await applyGeneratedStep(data, taskInput, stepHistory);
     } catch (error) {
-      applyFallbackStep(taskInput, error);
+      applyFallbackStep(taskInput, error, stepHistory);
     }
   }
 
-  function applyGeneratedStep(data, taskTitle) {
+  async function applyGeneratedStep(
+    data,
+    taskTitle,
+    historyForCompare = stepHistory,
+    options = {}
+  ) {
     if (!data?.isTaskComplete && isInvalidStep(data?.step)) {
       applyFallbackStep(
         taskTitle,
-        new Error("AI returned an empty or invalid step.")
+        new Error("AI returned an empty or invalid step."),
+        historyForCompare
+      );
+      return;
+    }
+
+    const nextStep = data.isTaskComplete
+      ? ""
+      : normalizeCurrentStep(data.step || "", {
+          taskTitle,
+          stage: historyForCompare.length === 0 ? "start" : "execute"
+    });
+
+    if (!data.isTaskComplete && isDuplicateStep(nextStep, historyForCompare)) {
+      if (options.retryDuplicate !== false && historyForCompare.length > 0) {
+        try {
+          setLoadingMessage("正在根据上一步重新生成下一步");
+          const retryData = await regenerateAfterDuplicateStep({
+            taskTitle,
+            rejectedStep: nextStep,
+            historyForCompare
+          });
+
+          await applyGeneratedStep(retryData, taskTitle, historyForCompare, {
+            retryDuplicate: false
+          });
+          return;
+        } catch (error) {
+          applyFallbackStep(taskTitle, error, historyForCompare);
+          return;
+        }
+      }
+
+      applyFallbackStep(
+        taskTitle,
+        new Error("AI returned a duplicate step."),
+        historyForCompare
       );
       return;
     }
 
     updateCurrentTask({
-      currentStep: data.isTaskComplete
-        ? ""
-        : normalizeCurrentStep(data.step || "", {
-            taskTitle,
-            stage: stepHistory.length === 0 ? "start" : "execute"
-          }),
+      currentStep: nextStep,
       status: data.isTaskComplete ? APP_STATUS.COMPLETED : APP_STATUS.READY,
       sessionSummary: data.sessionSummary || "",
       errorMessage: "",
@@ -1051,12 +1095,31 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
     clearSavedReEntryPoint();
   }
 
-  function applyFallbackStep(taskTitle, error) {
-    updateCurrentTask({
-      currentStep: normalizeCurrentStep(getFallbackStep(taskTitle), {
+  function regenerateAfterDuplicateStep({
+    taskTitle,
+    rejectedStep,
+    historyForCompare
+  }) {
+    return generateNextStep(
+      buildTaskGenerationPayload({
         taskTitle,
-        stage: stepHistory.length === 0 ? "start" : "execute"
+        taskContext: task.taskContext,
+        stepHistory: historyForCompare,
+        duplicateRetry: {
+          retryReason: "duplicate_step",
+          rejectedStep: getStepText(rejectedStep),
+          previousStep: getStepText(
+            historyForCompare[historyForCompare.length - 1]
+          )
+        }
       }),
+      historyForCompare
+    );
+  }
+
+  function applyFallbackStep(taskTitle, error, historyForCompare = stepHistory) {
+    updateCurrentTask({
+      currentStep: getNonDuplicateFallbackStep(taskTitle, historyForCompare),
       status: APP_STATUS.READY,
       generationSource: GENERATION_SOURCE.FALLBACK,
       sessionSummary: "AI 生成失败或超时，系统已启用 fallback 步骤。",
@@ -1737,15 +1800,25 @@ function buildTaskGenerationPayload({
   taskTitle,
   taskContext = {},
   clarificationAnswer = "",
-  stepHistory = []
+  stepHistory = [],
+  duplicateRetry = null
 }) {
   const normalizedContext = normalizeTaskContext(taskContext);
+  const retryContext =
+    duplicateRetry && typeof duplicateRetry === "object"
+      ? {
+          retryReason: String(duplicateRetry.retryReason || "").trim(),
+          rejectedStep: getStepText(duplicateRetry.rejectedStep),
+          previousStep: getStepText(duplicateRetry.previousStep)
+        }
+      : null;
 
   return {
     task: taskTitle,
     taskContext: normalizedContext,
     clarificationAnswer: String(clarificationAnswer || "").trim(),
-    stepHistory: stepHistory.map((step) => getStepText(step)).filter(Boolean)
+    stepHistory: stepHistory.map((step) => getStepText(step)).filter(Boolean),
+    ...(retryContext ? retryContext : {})
   };
 }
 
@@ -1822,7 +1895,10 @@ function getTaskListDetail(task) {
   const timeText = formatRelativeTime(task.updatedAt);
 
   if (task.status === APP_STATUS.COMPLETED) {
-    return `${statusMeta.label} · 共 ${task.stepHistory.length} 步 · ${timeText}`;
+    return {
+      summary: `${statusMeta.label} · 共 ${task.stepHistory.length} 步`,
+      timeText
+    };
   }
 
   const hasCurrentOrPendingStep =
@@ -1832,7 +1908,10 @@ function getTaskListDetail(task) {
     : `已完成 ${task.stepHistory.length} 步`;
   const summary = getStepText(task.currentStep) || "等待生成第一步";
 
-  return `${statusMeta.label} · ${stepLabel} · ${summary} · ${timeText}`;
+  return {
+    summary: `${statusMeta.label} · ${stepLabel} · ${summary}`,
+    timeText
+  };
 }
 
 function getTaskStatusIcon(status) {
@@ -1902,6 +1981,58 @@ function isInvalidStep(step) {
   ];
 
   return invalidPhrases.some((phrase) => text.includes(phrase));
+}
+
+function isDuplicateStep(nextStep, history) {
+  const nextText = normalizeStepForCompare(getStepText(nextStep));
+
+  if (!nextText || !Array.isArray(history)) {
+    return false;
+  }
+
+  return history.some((historyStep) => {
+    const historyText = normalizeStepForCompare(getStepText(historyStep));
+
+    if (!historyText) {
+      return false;
+    }
+
+    return (
+      nextText === historyText ||
+      nextText.includes(historyText) ||
+      historyText.includes(nextText) ||
+      getTextOverlapRatio(nextText, historyText) > 0.85
+    );
+  });
+}
+
+function normalizeStepForCompare(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[\s\u3000]/g, "")
+    .replace(/[.,!?;:'"()[\]{}，。！？；：“”‘’（）【】《》、]/g, "");
+}
+
+function getTextOverlapRatio(textA, textB) {
+  if (!textA || !textB) {
+    return 0;
+  }
+
+  const longer = textA.length >= textB.length ? textA : textB;
+  const shorter = textA.length >= textB.length ? textB : textA;
+  let overlapCount = 0;
+  const remainingChars = longer.split("");
+
+  for (const char of shorter) {
+    const index = remainingChars.indexOf(char);
+
+    if (index >= 0) {
+      overlapCount += 1;
+      remainingChars.splice(index, 1);
+    }
+  }
+
+  return overlapCount / longer.length;
 }
 
 function getStepText(step) {
@@ -2940,6 +3071,78 @@ function getFallbackStep(task) {
   }
 
   return "打开相关工具，写下这个任务现在能立刻完成的最小动作。";
+}
+
+function getNonDuplicateFallbackStep(taskTitle, history = []) {
+  const taskType = getTaskType(taskTitle);
+  const stage = history.length === 0 ? "start" : "execute";
+  const primaryStep = normalizeCurrentStep(getFallbackStep(taskTitle), {
+    taskTitle,
+    taskType,
+    stage
+  });
+
+  if (!isDuplicateStep(primaryStep, history)) {
+    return primaryStep;
+  }
+
+  const fallbackCandidates = [
+    {
+      step_text: "打开一个空白文档，写下这个任务下一步要留下的具体产出名称。",
+      action_type: "write",
+      completion_criteria: "写出 1 个产出名称即可，不需要开始制作内容。",
+      stage,
+      risk_flags: ["unclear_output"]
+    },
+    {
+      step_text: "写下你已经完成的 1 件事，以及下一步还缺的 1 件事。",
+      action_type: "write",
+      completion_criteria: "各写出 1 句话即可，不需要整理成计划。",
+      stage: "review",
+      risk_flags: ["unclear_output"]
+    },
+    {
+      step_text: "打开当前任务相关文件，只标出你准备继续处理的位置。",
+      action_type: "open",
+      completion_criteria: "看到并标出继续处理的位置即可，不需要修改内容。",
+      stage,
+      risk_flags: ["too_large"]
+    },
+    {
+      step_text: "新建一行空白记录，写下你接下来 5 分钟只处理哪一个小块。",
+      action_type: "write",
+      completion_criteria: "写出一个小块名称即可，不需要继续拆分。",
+      stage: "clarify",
+      risk_flags: ["too_large", "unclear_output"]
+    }
+  ];
+
+  for (const candidate of fallbackCandidates) {
+    const fallbackStep = normalizeCurrentStep(candidate, {
+      taskTitle,
+      taskType,
+      stage: candidate.stage
+    });
+
+    if (!isDuplicateStep(fallbackStep, history)) {
+      return fallbackStep;
+    }
+  }
+
+  return normalizeCurrentStep(
+    {
+      step_text: `写下这一步和上一条已完成步骤不同的 1 个动作，动作对象是：${taskTitle}`,
+      action_type: "write",
+      completion_criteria: "只要写出 1 个不同动作即可。",
+      stage: "clarify",
+      risk_flags: ["unclear_output"]
+    },
+    {
+      taskTitle,
+      taskType,
+      stage: "clarify"
+    }
+  );
 }
 
 function getTaskType(task) {
