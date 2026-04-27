@@ -1,0 +1,15 @@
+{
+  "name": "ai-task-runner-mvp",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "dev:client": "npm --prefix client run dev",
+    "dev:server": "npm --prefix server run dev",
+    "build": "npm --prefix client run build",
+    "test:resistance": "npm --prefix client run test:resistance"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
