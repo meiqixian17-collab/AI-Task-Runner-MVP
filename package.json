@@ -7,7 +7,10 @@
     "dev:client": "npm --prefix client run dev",
     "dev:server": "npm --prefix server run dev",
     "build": "npm --prefix client run build",
-    "test:resistance": "npm --prefix client run test:resistance"
+    "test:resistance": "npm --prefix client run test:resistance",
+    "test:quality": "npm --prefix client run test:quality",
+    "test:simple": "npm --prefix client run test:simple",
+    "test:all": "npm run build && npm run test:simple && npm run test:quality && npm run test:resistance"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

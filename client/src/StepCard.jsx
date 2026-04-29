@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const RESISTANCE_OPTIONS = [
   {
@@ -75,6 +75,8 @@ function StepCard({
   onStartExecuting,
   onResumeCurrentStep,
   onCompleteCurrentStep,
+  onConfirmSimpleTaskComplete,
+  onRequestSimpleTaskFinalStep,
   onSubmitClarificationAnswer,
   onToggleResistancePanel,
   onResistanceSelect,
@@ -85,13 +87,23 @@ function StepCard({
   const [resistanceText, setResistanceText] = useState("");
   const [clarificationAnswer, setClarificationAnswer] = useState("");
   const [clarificationError, setClarificationError] = useState("");
+  const [clarificationIsMultiline, setClarificationIsMultiline] =
+    useState(false);
+  const clarificationTextareaRef = useRef(null);
   const currentStepText = getStepText(currentStep);
   const isClarificationStep =
     currentStep &&
     typeof currentStep === "object" &&
     currentStep.step_type === "clarification";
+  const isCompletionConfirmationStep =
+    currentStep &&
+    typeof currentStep === "object" &&
+    currentStep.step_type === "completion_confirmation";
   const completionCriteria =
-    currentStep && typeof currentStep === "object" && !isClarificationStep
+    currentStep &&
+    typeof currentStep === "object" &&
+    !isClarificationStep &&
+    !isCompletionConfirmationStep
       ? currentStep.completion_criteria
       : "";
   const inputPlaceholder =
@@ -109,8 +121,26 @@ function StepCard({
   const canSubmitClarification = clarificationAnswer.trim().length > 0;
 
   useEffect(() => {
+    const textarea = clarificationTextareaRef.current;
+
+    if (!textarea) {
+      return;
+    }
+
+    textarea.style.height = "44px";
+
+    const isMultiline = textarea.scrollHeight > 44;
+    setClarificationIsMultiline((currentValue) =>
+      currentValue === isMultiline ? currentValue : isMultiline
+    );
+    textarea.style.height = isMultiline ? "80px" : "44px";
+    textarea.style.overflowY = textarea.scrollHeight > 80 ? "auto" : "hidden";
+  }, [clarificationAnswer]);
+
+  useEffect(() => {
     setClarificationAnswer("");
     setClarificationError("");
+    setClarificationIsMultiline(false);
   }, [
     currentStepText,
     currentStep && typeof currentStep === "object"
@@ -150,15 +180,27 @@ function StepCard({
       <div className="step-card-header">
         <div>
           <p className="section-kicker">
-            {isClarificationStep ? "信息补充" : "当前行动"}
+            {isClarificationStep
+              ? "信息补充"
+              : isCompletionConfirmationStep
+                ? "完成确认"
+                : "当前行动"}
           </p>
           <h2 id="step-card-title">
-            {isClarificationStep ? "需要补充信息" : statusCopy.title}
+            {isClarificationStep
+              ? "需要补充信息"
+              : isCompletionConfirmationStep
+                ? "确认是否收尾"
+                : statusCopy.title}
           </h2>
         </div>
         <div className="step-meta">
           <span className={`status-pill status-pill--${statusMeta.tone}`}>
-            {isClarificationStep ? "待补充" : statusMeta.label}
+            {isClarificationStep
+              ? "待补充"
+              : isCompletionConfirmationStep
+                ? "待确认"
+                : statusMeta.label}
           </span>
           <span className="step-index">第 {currentStepNumber} 步</span>
         </div>
@@ -187,7 +229,13 @@ function StepCard({
       {showCurrentStep && !isResolvingResistance && (
         <div className="step-focus">
           <div className="step-focus-header">
-            <span>{isClarificationStep ? "需要补充信息" : statusCopy.label}</span>
+            <span>
+              {isClarificationStep
+                ? "需要补充信息"
+                : isCompletionConfirmationStep
+                  ? "简单任务收尾"
+                  : statusCopy.label}
+            </span>
             {generationSource === "ai" && (
               <strong className="source-badge source-badge--ai">
                 AI 返回
@@ -202,18 +250,29 @@ function StepCard({
           <p className="current-step-text">{currentStepText}</p>
           {appStatus === "ready" && isClarificationStep && (
             <form
-              className="clarification-input-row"
+              className={`clarification-input-row${
+                clarificationIsMultiline
+                  ? " clarification-input-row--multiline"
+                  : ""
+              }`}
               onSubmit={handleClarificationSubmit}
             >
-              <input
+              <textarea
+                ref={clarificationTextareaRef}
                 aria-label="补充任务信息"
-                type="text"
                 value={clarificationAnswer}
                 onChange={(event) => {
                   setClarificationAnswer(event.target.value);
                   setClarificationError("");
                 }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    handleClarificationSubmit(event);
+                  }
+                }}
                 placeholder={inputPlaceholder || "输入补充信息"}
+                rows={1}
               />
               <button
                 aria-label="提交补充信息"
@@ -228,10 +287,30 @@ function StepCard({
               )}
             </form>
           )}
+          {appStatus === "ready" && isCompletionConfirmationStep && (
+            <div className="action-row">
+              <button
+                className="primary-action"
+                type="button"
+                onClick={onConfirmSimpleTaskComplete}
+              >
+                已经完成
+              </button>
+              <button
+                className="secondary-action"
+                type="button"
+                onClick={onRequestSimpleTaskFinalStep}
+              >
+                还差一步
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {appStatus === "ready" && !isClarificationStep && (
+      {appStatus === "ready" &&
+        !isClarificationStep &&
+        !isCompletionConfirmationStep && (
         <button className="primary-action" onClick={onStartExecuting}>
           开始执行
         </button>
@@ -277,7 +356,7 @@ function StepCard({
                       disabled={!canSubmitResistanceText}
                       type="submit"
                     >
-                      →
+                      ✓
                     </button>
                   </form>
                 </div>
@@ -303,10 +382,6 @@ function StepCard({
               </div>
             )}
           </div>
-
-          <button className="quiet-action" onClick={onExit}>
-            返回我的任务
-          </button>
         </div>
       )}
 

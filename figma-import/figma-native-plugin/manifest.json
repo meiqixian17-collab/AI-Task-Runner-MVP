@@ -1,0 +1,7 @@
+{
+  "name": "AI Task Runner UI Importer",
+  "id": "ai-task-runner-ui-importer",
+  "api": "1.0.0",
+  "main": "code.js",
+  "editorType": ["figma"]
+}

@@ -6,7 +6,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:resistance": "node scripts/test-resistance-pipeline.mjs"
+    "test:resistance": "node scripts/test-resistance-pipeline.mjs",
+    "test:quality": "node scripts/test-quality-gates.mjs",
+    "test:simple": "node scripts/test-simple-task-completion.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.1",

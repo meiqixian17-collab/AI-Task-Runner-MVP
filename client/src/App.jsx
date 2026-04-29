@@ -13,6 +13,11 @@ import {
   normalizeResistanceResolution as normalizePipelineResistanceResolution,
   resolveResistance
 } from "./resistancePipeline.mjs";
+import {
+  createSimpleCompletionStep,
+  createSimpleFinishingStep,
+  shouldAskSimpleTaskCompletion
+} from "./simpleTaskCompletion.mjs";
 import StepCard from "./StepCard.jsx";
 
 const APP_STATUS = {
@@ -576,10 +581,24 @@ function MyTasksPage({
   const suppressNextClick = useRef(false);
   const [menuTaskId, setMenuTaskId] = useState(null);
   const [deleteConfirmTaskId, setDeleteConfirmTaskId] = useState(null);
+  const [completedOpen, setCompletedOpen] = useState(false);
   const activeMenuTask =
     tasks.find((task) => task.id === menuTaskId) || null;
   const deleteConfirmTask =
     tasks.find((task) => task.id === deleteConfirmTaskId) || null;
+  const sortedTasks = [...tasks].sort((firstTask, secondTask) => {
+    if (firstTask.isImportant === secondTask.isImportant) {
+      return 0;
+    }
+
+    return firstTask.isImportant ? -1 : 1;
+  });
+  const activeTasks = sortedTasks.filter(
+    (task) => task.status !== APP_STATUS.COMPLETED
+  );
+  const completedTasks = sortedTasks.filter(
+    (task) => task.status === APP_STATUS.COMPLETED
+  );
 
   function openTaskMenu(taskId) {
     suppressNextClick.current = true;
@@ -664,59 +683,121 @@ function MyTasksPage({
         </section>
       ) : (
         <>
-          <p className="task-list-hint">长按任务可编辑</p>
-          <section className="task-list" aria-label="任务列表">
-            {tasks.map((task) => {
-              const statusMeta = getStatusMeta(task.status);
-              const detail = getTaskListDetail(task);
+          {activeTasks.length === 0 ? (
+            <section className="surface-card tasks-empty" aria-live="polite">
+              <h2>暂无未完成任务</h2>
+              <p>新的任务会继续出现在这里。</p>
+            </section>
+          ) : (
+            <>
+              <p className="task-list-hint">长按任务可编辑</p>
+              <section className="task-list" aria-label="任务列表">
+                {activeTasks.map((task) => {
+                  const statusMeta = getStatusMeta(task.status);
+                  const detail = getTaskListDetail(task);
 
-              return (
-                <button
-                  className={`task-list-item${
-                    task.isImportant ? " task-list-item--important" : ""
-                  }`}
-                  key={task.id}
-                  type="button"
-                  onClick={() => handleTaskClick(task.id)}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    openTaskMenu(task.id);
-                  }}
-                  onMouseDown={() => startLongPress(task.id)}
-                  onMouseLeave={() => clearLongPress(task.id)}
-                  onMouseUp={() => clearLongPress(task.id)}
-                  onTouchCancel={() => clearLongPress(task.id)}
-                  onTouchEnd={() => clearLongPress(task.id)}
-                  onTouchMove={() => clearLongPress(task.id)}
-                  onTouchStart={() => startLongPress(task.id)}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`task-status-icon task-status-icon--${statusMeta.tone}`}
-                  >
-                    {getTaskStatusIcon(task.status)}
-                  </span>
-                  <span className="task-list-content">
-                    <strong>
-                      {task.isImportant && (
-                        <span className="important-mark">重要 · </span>
-                      )}
-                      {task.title || "未命名任务"}
-                    </strong>
-                    <span className="task-list-detail">
-                      <span className="task-list-summary">{detail.summary}</span>
-                      <time
-                        className="task-list-time"
-                        dateTime={task.updatedAt}
+                  return (
+                    <button
+                      className={`task-list-item${
+                        task.isImportant ? " task-list-item--important" : ""
+                      }`}
+                      key={task.id}
+                      type="button"
+                      onClick={() => handleTaskClick(task.id)}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        openTaskMenu(task.id);
+                      }}
+                      onMouseDown={() => startLongPress(task.id)}
+                      onMouseLeave={() => clearLongPress(task.id)}
+                      onMouseUp={() => clearLongPress(task.id)}
+                      onTouchCancel={() => clearLongPress(task.id)}
+                      onTouchEnd={() => clearLongPress(task.id)}
+                      onTouchMove={() => clearLongPress(task.id)}
+                      onTouchStart={() => startLongPress(task.id)}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`task-status-icon task-status-icon--${statusMeta.tone}`}
                       >
-                        {detail.timeText}
-                      </time>
-                    </span>
+                        {getTaskStatusIcon(task.status)}
+                      </span>
+                      <span className="task-list-content">
+                        <strong>
+                          {task.isImportant && (
+                            <span className="important-mark" aria-label="重要任务">
+                              ★
+                            </span>
+                          )}
+                          {task.title || "未命名任务"}
+                        </strong>
+                        <span className="task-list-detail">
+                          <span className="task-list-summary">{detail.summary}</span>
+                          <time
+                            className="task-list-time"
+                            dateTime={task.updatedAt}
+                          >
+                            {detail.timeText}
+                          </time>
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </section>
+            </>
+          )}
+
+          {completedTasks.length > 0 && (
+            <section
+              className="completed-tasks"
+              aria-labelledby="completed-tasks-title"
+            >
+              <button
+                aria-controls="completed-tasks-list"
+                aria-expanded={completedOpen}
+                className="completed-tasks-toggle"
+                type="button"
+                onClick={() => setCompletedOpen((isOpen) => !isOpen)}
+              >
+                <span id="completed-tasks-title">已完成任务</span>
+                <span aria-hidden="true" className="completed-tasks-meta">
+                  {completedTasks.length} 个
+                  <span
+                    className={`completed-tasks-chevron${
+                      completedOpen ? " completed-tasks-chevron--open" : ""
+                    }`}
+                  >
+                    ›
                   </span>
-                </button>
-              );
-            })}
-          </section>
+                </span>
+              </button>
+
+              {completedOpen && (
+                <ul className="completed-task-list" id="completed-tasks-list">
+                  {completedTasks.map((task) => {
+                    const statusMeta = getStatusMeta(task.status);
+
+                    return (
+                      <li className="completed-task-row" key={task.id}>
+                        <button
+                          aria-label={`打开${task.title || "未命名任务"}的任务菜单`}
+                          className="completed-task-item"
+                          type="button"
+                          onClick={() => openTaskMenu(task.id)}
+                        >
+                          <strong>{task.title || "未命名任务"}</strong>
+                          <span className={`status-pill status-pill--${statusMeta.tone}`}>
+                            {statusMeta.label}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          )}
         </>
       )}
 
@@ -763,7 +844,7 @@ function MyTasksPage({
             onClick={(event) => event.stopPropagation()}
           >
             <h2 id="delete-task-title">确定删除这个任务吗？</h2>
-            <p>删除后无法恢复。</p>
+            <p>删除后无法恢复</p>
             <div className="confirm-actions">
               <button type="button" onClick={() => setDeleteConfirmTaskId(null)}>
                 取消
@@ -1023,6 +1104,16 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
       return;
     }
 
+    if (
+      shouldAskSimpleTaskCompletion({
+        taskTitle: taskInput,
+        stepHistory: nextHistory
+      })
+    ) {
+      showSimpleTaskCompletionConfirmation(taskInput);
+      return;
+    }
+
     const clarificationStep = maybeGenerateClarificationStep({
       title: taskInput,
       taskContext: task.taskContext
@@ -1163,6 +1254,17 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
     });
 
     if (!data.isTaskComplete && isDuplicateStep(nextStep, historyForCompare)) {
+      if (
+        shouldAskSimpleTaskCompletion({
+          taskTitle,
+          stepHistory: historyForCompare,
+          isDuplicate: true
+        })
+      ) {
+        showSimpleTaskCompletionConfirmation(taskTitle);
+        return;
+      }
+
       if (options.retryDuplicate !== false && historyForCompare.length > 0) {
         try {
           setLoadingMessage("正在根据上一步重新生成下一步");
@@ -1228,6 +1330,66 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
       sessionSummary: data.sessionSummary || "",
       errorMessage: "",
       generationSource: GENERATION_SOURCE.AI,
+      reEntryPoint: null,
+      resistancePanelOpen: false,
+      selectedResistanceType: "",
+      resistanceFeedback: "",
+      interruptedStep: "",
+      resistanceDiagnosis: null,
+      resistanceResolution: null
+    });
+    clearSavedReEntryPoint();
+  }
+
+  function showSimpleTaskCompletionConfirmation(taskTitle) {
+    updateCurrentTask({
+      currentStep: normalizeCurrentStep(createSimpleCompletionStep(taskTitle), {
+        taskTitle,
+        stage: "finish"
+      }),
+      status: APP_STATUS.READY,
+      sessionSummary: "",
+      errorMessage: "",
+      generationSource: GENERATION_SOURCE.NONE,
+      reEntryPoint: null,
+      resistancePanelOpen: false,
+      selectedResistanceType: "",
+      resistanceFeedback: "",
+      interruptedStep: "",
+      resistanceDiagnosis: null,
+      resistanceResolution: null
+    });
+    clearSavedReEntryPoint();
+  }
+
+  function handleConfirmSimpleTaskComplete() {
+    updateCurrentTask({
+      currentStep: "",
+      status: APP_STATUS.COMPLETED,
+      sessionSummary: "已确认这个简单任务完成。",
+      errorMessage: "",
+      generationSource: GENERATION_SOURCE.NONE,
+      reEntryPoint: null,
+      resistancePanelOpen: false,
+      selectedResistanceType: "",
+      resistanceFeedback: "",
+      interruptedStep: "",
+      resistanceDiagnosis: null,
+      resistanceResolution: null
+    });
+    clearSavedReEntryPoint();
+  }
+
+  function handleRequestSimpleTaskFinalStep() {
+    updateCurrentTask({
+      currentStep: normalizeCurrentStep(createSimpleFinishingStep(taskInput), {
+        taskTitle: taskInput,
+        stage: "finish"
+      }),
+      status: APP_STATUS.READY,
+      sessionSummary: "",
+      errorMessage: "",
+      generationSource: GENERATION_SOURCE.NONE,
       reEntryPoint: null,
       resistancePanelOpen: false,
       selectedResistanceType: "",
@@ -1535,7 +1697,7 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
   }
 
   return (
-    <main className="page">
+    <main className="page page--execution">
       <header className="app-header execution-header">
         <div className="page-title-stack">
           <p className="eyebrow">AI Task Runner</p>
@@ -1620,6 +1782,8 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
           onStartExecuting={handleStartExecuting}
           onResumeCurrentStep={handleResumeCurrentStep}
           onCompleteCurrentStep={handleCompleteCurrentStep}
+          onConfirmSimpleTaskComplete={handleConfirmSimpleTaskComplete}
+          onRequestSimpleTaskFinalStep={handleRequestSimpleTaskFinalStep}
           onSubmitClarificationAnswer={handleSubmitClarificationAnswer}
           onToggleResistancePanel={toggleResistancePanel}
           onResistanceSelect={handleResistanceSelect}
@@ -2348,7 +2512,10 @@ function normalizeCurrentStep(value, options = {}) {
   const taskTitle = options.taskTitle || "";
   const taskType = options.taskType || getTaskType(taskTitle || stepText);
   const stepType =
-    rawStep.step_type === "clarification" ? "clarification" : "action";
+    rawStep.step_type === "clarification" ||
+    rawStep.step_type === "completion_confirmation"
+      ? rawStep.step_type
+      : "action";
   const actionType =
     normalizeActionType(rawStep.action_type) ||
     inferActionType(stepText, taskType);
@@ -2388,6 +2555,10 @@ function normalizeCurrentStep(value, options = {}) {
     normalizedStep.input_placeholder = String(
       rawStep.input_placeholder || rawStep.inputPlaceholder || ""
     ).trim();
+  }
+
+  if (stepType === "completion_confirmation") {
+    normalizedStep.simple_task_type = String(rawStep.simple_task_type || "").trim();
   }
 
   return normalizedStep;
