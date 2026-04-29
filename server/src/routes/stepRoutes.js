@@ -4,7 +4,8 @@ import {
   generateFirstStepPrompt,
   generateNextStepPrompt,
   generateRecoveryPlanningPrompt,
-  generateResistanceDiagnosisPrompt
+  generateResistanceDiagnosisPrompt,
+  generateResistanceResolutionPrompt
 } from "../services/promptService.js";
 import { callDeepSeek } from "../services/deepseekClient.js";
 
@@ -254,6 +255,71 @@ router.post("/generate-fallback-step", async (req, res) => {
 
     res.status(500).json({
       message: error.message || "Failed to generate resistance fallback step."
+    });
+  }
+});
+
+router.post("/resolve-resistance", async (req, res) => {
+  try {
+    const { context } = req.body;
+
+    if (!context || typeof context !== "object") {
+      return res.status(400).json({
+        message: "context is required and must be an object."
+      });
+    }
+
+    const prompt = generateResistanceResolutionPrompt(context);
+    const aiText = await callDeepSeek(prompt, {
+      systemPrompt:
+        "You are a task-internal resistance resolution layer. Return only valid JSON containing diagnosis, recoveryPlan, and fallback_step."
+    });
+    const parsed = parseAiJsonObject(aiText);
+    const diagnosis = normalizeResistanceDiagnosis(
+      JSON.stringify(parsed?.diagnosis || {}),
+      context
+    );
+    const { recoveryPlan, recoveryPlanError } = normalizeRecoveryPlan(
+      JSON.stringify(parsed?.recoveryPlan || parsed?.recovery_plan || {}),
+      context,
+      diagnosis
+    );
+    const { fallbackStep, fallbackStepError } = recoveryPlan
+      ? normalizeGeneratedFallbackStep(
+          JSON.stringify(parsed?.fallback_step || {}),
+          context,
+          recoveryPlan
+        )
+      : {
+          fallbackStep: null,
+          fallbackStepError: "AI recoveryPlan is missing."
+        };
+
+    res.json({
+      raw_output: aiText,
+      diagnosis,
+      recoveryPlan,
+      recoveryPlanError,
+      fallback_step: fallbackStep,
+      fallbackStepError,
+      debugResistanceTrace: {
+        context,
+        diagnosis,
+        recoveryPlan,
+        fallbackStepGeneration: {
+          raw_output: aiText,
+          parsed_fallback_step: fallbackStep,
+          validation_result: null,
+          retry_count: 0,
+          final_source: fallbackStep ? "ai_generated" : "legacy_fallback"
+        }
+      }
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      message: error.message || "Failed to resolve resistance."
     });
   }
 });

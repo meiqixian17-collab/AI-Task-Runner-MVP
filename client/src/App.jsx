@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  diagnoseResistance as requestResistanceDiagnosis,
-  generateResistanceFallbackStep,
   generateFirstStep,
   generateNextStep,
-  planResistanceRecovery
+  resolveResistanceWithAi
 } from "./api.js";
 import {
   buildAiDiagnosisContext,
@@ -183,6 +181,89 @@ const ACTION_TYPES = [
 const ESTIMATED_EFFORTS = ["low", "medium", "high"];
 
 const STEP_STAGES = ["start", "clarify", "execute", "review", "finish"];
+
+const UNSUPPORTED_NON_TEXT_RETRY_REASON = "unsupported_non_text_input_request";
+
+const NON_TEXT_MATERIAL_KEYWORDS = [
+  "照片",
+  "拍照",
+  "截图",
+  "图片",
+  "图像",
+  "录音",
+  "音频",
+  "文件",
+  "附件",
+  "pdf",
+  "word",
+  "excel",
+  "screenshot",
+  "photo",
+  "image",
+  "audio",
+  "recording",
+  "file",
+  "attachment"
+];
+
+const UNSUPPORTED_NON_TEXT_RECIPIENT_KEYWORDS = [
+  "给我",
+  "发来",
+  "发过来",
+  "发给系统",
+  "给系统",
+  "让我看",
+  "给我看",
+  "传上来",
+  "传给我",
+  "上传到这里",
+  "发到这里",
+  "粘贴到这里",
+  "贴到这里",
+  "send me",
+  "to me",
+  "upload here",
+  "paste here",
+  "show me",
+  "provide me",
+  "submit here"
+];
+
+const UNSUPPORTED_NON_TEXT_ACTION_KEYWORDS = [
+  "上传",
+  "粘贴",
+  "贴上",
+  "提供",
+  "提交",
+  "展示",
+  "upload",
+  "paste",
+  "attach",
+  "provide",
+  "submit"
+];
+
+const EXTERNAL_NON_TEXT_TARGET_KEYWORDS = [
+  "网站",
+  "平台",
+  "页面",
+  "表单",
+  "邮箱",
+  "老师",
+  "同学",
+  "朋友",
+  "领导",
+  "hr",
+  "客户",
+  "对方",
+  "学校",
+  "公司",
+  "招聘",
+  "申请",
+  "报名",
+  "app",
+  "application"
+];
 
 const ROOT_CAUSES = [
   "unclear_output",
@@ -704,6 +785,9 @@ function MyTasksPage({
 
 function TaskExecutionPage({ task, onBack, onUpdateTask }) {
   const [loadingMessage, setLoadingMessage] = useState("");
+  const [isResolvingResistance, setIsResolvingResistance] = useState(false);
+  const [resistanceLoadingMessage, setResistanceLoadingMessage] = useState("");
+  const resistanceLoadingTimers = useRef([]);
 
   const taskInput = task.title;
   const appStatus = task.status;
@@ -752,6 +836,8 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
     };
   }, [isLoading]);
 
+  useEffect(() => () => clearResistanceLoadingTimers(), []);
+
   function updateCurrentTask(updates) {
     onUpdateTask(task.id, updates);
   }
@@ -764,6 +850,32 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
       interruptedStep: "",
       ...extraUpdates
     });
+  }
+
+  function clearResistanceLoadingTimers() {
+    resistanceLoadingTimers.current.forEach((timer) => window.clearTimeout(timer));
+    resistanceLoadingTimers.current = [];
+  }
+
+  function startResistanceLoading() {
+    clearResistanceLoadingTimers();
+    setIsResolvingResistance(true);
+    setResistanceLoadingMessage("正在分析卡点");
+
+    resistanceLoadingTimers.current = [
+      window.setTimeout(() => {
+        setResistanceLoadingMessage("正在生成低阻力步骤");
+      }, 2000),
+      window.setTimeout(() => {
+        setResistanceLoadingMessage("正在校验可执行步骤");
+      }, 5000)
+    ];
+  }
+
+  function stopResistanceLoading() {
+    clearResistanceLoadingTimers();
+    setIsResolvingResistance(false);
+    setResistanceLoadingMessage("");
   }
 
   function handleTitleChange(event) {
@@ -1078,6 +1190,38 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
       return;
     }
 
+    if (
+      !data.isTaskComplete &&
+      hasUnsupportedNonTextInputRequest(nextStep)
+    ) {
+      if (options.retryUnsupportedNonText !== false) {
+        try {
+          setLoadingMessage("正在重新生成文字可执行步骤");
+          const retryData = await regenerateAfterUnsupportedNonTextInputRequest({
+            taskTitle,
+            rejectedStep: nextStep,
+            historyForCompare
+          });
+
+          await applyGeneratedStep(retryData, taskTitle, historyForCompare, {
+            ...options,
+            retryUnsupportedNonText: false
+          });
+          return;
+        } catch (error) {
+          applyFallbackStep(taskTitle, error, historyForCompare);
+          return;
+        }
+      }
+
+      applyFallbackStep(
+        taskTitle,
+        new Error("AI requested unsupported non-text input."),
+        historyForCompare
+      );
+      return;
+    }
+
     updateCurrentTask({
       currentStep: nextStep,
       status: data.isTaskComplete ? APP_STATUS.COMPLETED : APP_STATUS.READY,
@@ -1115,6 +1259,28 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
       }),
       historyForCompare
     );
+  }
+
+  function regenerateAfterUnsupportedNonTextInputRequest({
+    taskTitle,
+    rejectedStep,
+    historyForCompare
+  }) {
+    const retryPayload = buildTaskGenerationPayload({
+      taskTitle,
+      taskContext: task.taskContext,
+      stepHistory: historyForCompare,
+      duplicateRetry: buildUnsupportedNonTextRetryContext({
+        rejectedStep,
+        historyForCompare
+      })
+    });
+
+    if (historyForCompare.length === 0) {
+      return generateFirstStep(retryPayload);
+    }
+
+    return generateNextStep(retryPayload, historyForCompare);
   }
 
   function applyFallbackStep(taskTitle, error, historyForCompare = stepHistory) {
@@ -1157,7 +1323,47 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
     applyResistance("", resistanceText);
   }
 
+  async function resolveResistanceWithUnsupportedRetry({
+    aiDiagnosisContext,
+    resistanceInput
+  }) {
+    const firstResult = await resolveResistanceWithAi(aiDiagnosisContext);
+
+    if (!hasUnsupportedNonTextInputRequest(firstResult.fallback_step)) {
+      return {
+        aiResolutionResult: firstResult,
+        retryCount: 0,
+        unsupportedAfterRetry: false
+      };
+    }
+
+    setResistanceLoadingMessage("正在重新生成文字可执行步骤");
+
+    const retryResult = await resolveResistanceWithAi({
+      ...aiDiagnosisContext,
+      ...buildUnsupportedNonTextRetryContext({
+        rejectedStep: firstResult.fallback_step,
+        historyForCompare: resistanceInput.stepHistory || []
+      }),
+      previousStep: getStepText(currentStep)
+    });
+
+    return {
+      aiResolutionResult: retryResult,
+      retryCount: 1,
+      unsupportedAfterRetry: hasUnsupportedNonTextInputRequest(
+        retryResult.fallback_step
+      )
+    };
+  }
+
   async function applyResistance(type, resistanceText) {
+    if (isResolvingResistance) {
+      return;
+    }
+
+    startResistanceLoading();
+
     const resistanceInput = {
       taskTitle: taskInput,
       currentStep,
@@ -1179,101 +1385,60 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
     };
 
     try {
-      const aiDiagnosisResult = await requestResistanceDiagnosis(
-        aiDiagnosisContext
-      );
-      aiDiagnosis = aiDiagnosisResult.diagnosis || null;
-
-      console.log("[debugResistanceTrace]", {
-        context: aiDiagnosisContext,
-        diagnosis: aiDiagnosis
+      const {
+        aiResolutionResult,
+        retryCount,
+        unsupportedAfterRetry
+      } = await resolveResistanceWithUnsupportedRetry({
+        aiDiagnosisContext,
+        resistanceInput
       });
-    } catch (error) {
-      console.warn("[debugResistanceTrace] AI diagnosis failed", error);
-    }
+      aiDiagnosis = aiResolutionResult.diagnosis || null;
+      aiRecoveryPlan = aiResolutionResult.recoveryPlan || null;
+      aiRecoveryPlanError = aiResolutionResult.recoveryPlanError || "";
 
-    if (aiDiagnosis) {
-      try {
-        const recoveryPlanResult = await planResistanceRecovery(
-          aiDiagnosisContext,
-          aiDiagnosis
+      const generatedStep = aiResolutionResult.fallback_step || null;
+      if (unsupportedAfterRetry) {
+        fallbackStepGeneration = {
+          raw_output: aiResolutionResult.raw_output || "",
+          parsed_fallback_step: generatedStep,
+          validation_result: {
+            passed: false,
+            severity: "error",
+            issues: [
+              {
+                code: "unsupported_non_text_input_request",
+                severity: "error",
+                message:
+                  "AI fallback step requested unsupported non-text input."
+              }
+            ]
+          },
+          retry_count: retryCount,
+          final_source: "template_fallback"
+        };
+        console.warn(
+          "[debugResistanceTrace] AI fallback step requested unsupported non-text input"
         );
-        aiRecoveryPlan = recoveryPlanResult.recoveryPlan || null;
-        aiRecoveryPlanError = recoveryPlanResult.recoveryPlanError || "";
+      } else {
+        const evaluation = evaluateAiFallbackStep(
+          resistanceInput,
+          generatedStep,
+          aiRecoveryPlan
+        );
 
-        console.log("[debugResistanceTrace]", {
-          context: aiDiagnosisContext,
-          diagnosis: aiDiagnosis,
-          recoveryPlan: aiRecoveryPlan,
-          recoveryPlanError: aiRecoveryPlanError
-        });
-      } catch (error) {
-        aiRecoveryPlanError = error.message || "AI recovery planning failed";
-        console.warn("[debugResistanceTrace] AI recovery planning failed", error);
-      }
-    }
+        fallbackStepGeneration = {
+          raw_output: aiResolutionResult.raw_output || "",
+          parsed_fallback_step: generatedStep,
+          validation_result: evaluation.validation,
+          retry_count: retryCount,
+          final_source: evaluation.validation.passed
+            ? "ai_generated"
+            : "template_fallback"
+        };
 
-    if (aiDiagnosis && aiRecoveryPlan) {
-      let validationFeedback = null;
-
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        try {
-          const fallbackStepResult = await generateResistanceFallbackStep({
-            context: aiDiagnosisContext,
-            diagnosis: aiDiagnosis,
-            recoveryPlan: aiRecoveryPlan,
-            validationFeedback
-          });
-          const generatedStep = fallbackStepResult.fallback_step || null;
-          const evaluation = evaluateAiFallbackStep(
-            resistanceInput,
-            generatedStep,
-            aiRecoveryPlan
-          );
-
-          fallbackStepGeneration = {
-            raw_output: fallbackStepResult.raw_output || "",
-            parsed_fallback_step: generatedStep,
-            validation_result: evaluation.validation,
-            retry_count: attempt,
-            final_source: evaluation.validation.passed
-              ? "ai_generated"
-              : "template_fallback"
-          };
-
-          if (evaluation.validation.passed) {
-            aiFallbackStep = generatedStep;
-            break;
-          }
-
-          validationFeedback = {
-            retry_count: attempt + 1,
-            validation_result: evaluation.validation,
-            previous_fallback_step: generatedStep
-          };
-        } catch (error) {
-          fallbackStepGeneration = {
-            ...fallbackStepGeneration,
-            validation_result: {
-              passed: false,
-              severity: "error",
-              issues: [
-                {
-                  code: "ai_fallback_generation_failed",
-                  severity: "error",
-                  message:
-                    error.message || "AI fallback step generation failed."
-                }
-              ]
-            },
-            retry_count: attempt,
-            final_source: "legacy_fallback"
-          };
-          console.warn(
-            "[debugResistanceTrace] AI fallback step generation failed",
-            error
-          );
-          break;
+        if (evaluation.validation.passed) {
+          aiFallbackStep = generatedStep;
         }
       }
 
@@ -1283,45 +1448,67 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
         recoveryPlan: aiRecoveryPlan,
         fallbackStepGeneration
       });
+    } catch (error) {
+      aiRecoveryPlanError = error.message || "AI resistance resolution failed";
+      fallbackStepGeneration = {
+        ...fallbackStepGeneration,
+        validation_result: {
+          passed: false,
+          severity: "error",
+          issues: [
+            {
+              code: "ai_resistance_resolution_failed",
+              severity: "error",
+              message: aiRecoveryPlanError
+            }
+          ]
+        },
+        final_source: "legacy_fallback"
+      };
+      console.warn("[debugResistanceTrace] AI resistance resolution failed", error);
     }
 
-    const resistanceResolution = resolveResistance({
-      ...resistanceInput,
-      aiDiagnosis,
-      aiDiagnosisContext,
-      aiRecoveryPlan,
-      aiRecoveryPlanError,
-      aiFallbackStep,
-      fallbackStepGeneration
-    });
-    const diagnosis = resistanceResolution.diagnosis;
-    const legacyDiagnosis = {
-      ...diagnosis,
-      ai_diagnosis: resistanceResolution.ai_diagnosis,
-      ai_recovery_plan: resistanceResolution.ai_recovery_plan,
-      ai_recovery_plan_error: resistanceResolution.ai_recovery_plan_error,
-      ai_fallback_step: resistanceResolution.ai_fallback_step,
-      debugResistanceTrace: resistanceResolution.debugResistanceTrace,
-      recovery_strategy: resistanceResolution.recovery_decision.fallback_policy,
-      recovery_mode: resistanceResolution.recovery_decision.recovery_mode,
-      fallback_step: resistanceResolution.fallback_step
-    };
+    try {
+      const resistanceResolution = resolveResistance({
+        ...resistanceInput,
+        aiDiagnosis,
+        aiDiagnosisContext,
+        aiRecoveryPlan,
+        aiRecoveryPlanError,
+        aiFallbackStep,
+        fallbackStepGeneration
+      });
+      const diagnosis = resistanceResolution.diagnosis;
+      const legacyDiagnosis = {
+        ...diagnosis,
+        ai_diagnosis: resistanceResolution.ai_diagnosis,
+        ai_recovery_plan: resistanceResolution.ai_recovery_plan,
+        ai_recovery_plan_error: resistanceResolution.ai_recovery_plan_error,
+        ai_fallback_step: resistanceResolution.ai_fallback_step,
+        debugResistanceTrace: resistanceResolution.debugResistanceTrace,
+        recovery_strategy: resistanceResolution.recovery_decision.fallback_policy,
+        recovery_mode: resistanceResolution.recovery_decision.recovery_mode,
+        fallback_step: resistanceResolution.fallback_step
+      };
 
-    updateCurrentTask({
-      status: APP_STATUS.EXECUTING,
-      errorMessage: "",
-      generationSource: GENERATION_SOURCE.FALLBACK,
-      selectedResistanceType:
-        type || getPipelineLegacyResistanceType(diagnosis.surface_resistance),
-      resistanceFeedback: getPipelineDiagnosisFeedback(diagnosis),
-      interruptedStep: currentStep,
-      currentStep: resistanceResolution.fallback_step,
-      resistanceDiagnosis: legacyDiagnosis,
-      resistanceResolution,
-      reEntryPoint: null,
-      sessionSummary: "",
-      resistancePanelOpen: false
-    });
+      updateCurrentTask({
+        status: APP_STATUS.EXECUTING,
+        errorMessage: "",
+        generationSource: GENERATION_SOURCE.FALLBACK,
+        selectedResistanceType:
+          type || getPipelineLegacyResistanceType(diagnosis.surface_resistance),
+        resistanceFeedback: getPipelineDiagnosisFeedback(diagnosis),
+        interruptedStep: currentStep,
+        currentStep: resistanceResolution.fallback_step,
+        resistanceDiagnosis: legacyDiagnosis,
+        resistanceResolution,
+        reEntryPoint: null,
+        sessionSummary: "",
+        resistancePanelOpen: false
+      });
+    } finally {
+      stopResistanceLoading();
+    }
   }
 
   function handleReset() {
@@ -1425,6 +1612,8 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
           reEntryPoint={task.reEntryPoint}
           resistancePanelOpen={task.resistancePanelOpen}
           resistanceResult={resistanceResult}
+          isResolvingResistance={isResolvingResistance}
+          resistanceLoadingMessage={resistanceLoadingMessage}
           sessionSummary={task.sessionSummary}
           errorMessage={task.errorMessage}
           statusMeta={statusMeta}
@@ -1820,6 +2009,76 @@ function buildTaskGenerationPayload({
     stepHistory: stepHistory.map((step) => getStepText(step)).filter(Boolean),
     ...(retryContext ? retryContext : {})
   };
+}
+
+function buildUnsupportedNonTextRetryContext({
+  rejectedStep,
+  historyForCompare = []
+}) {
+  return {
+    retryReason: UNSUPPORTED_NON_TEXT_RETRY_REASON,
+    rejectedStep: getUserVisibleStepSummary(rejectedStep),
+    previousStep: getStepText(historyForCompare[historyForCompare.length - 1])
+  };
+}
+
+function hasUnsupportedNonTextInputRequest(step) {
+  return collectUserVisibleStepText(step).some((text) =>
+    isUnsupportedNonTextInputRequestText(text)
+  );
+}
+
+function getUserVisibleStepSummary(step) {
+  return collectUserVisibleStepText(step).join(" | ");
+}
+
+function collectUserVisibleStepText(value) {
+  if (typeof value === "string") {
+    return [value].filter(Boolean);
+  }
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return [];
+  }
+
+  return [
+    value.step_text,
+    value.stepText,
+    value.question,
+    value.content,
+    value.text,
+    value.step,
+    value.action,
+    value.title,
+    value.placeholder,
+    value.input_placeholder,
+    value.inputPlaceholder,
+    value.completion_criteria,
+    value.completionCriteria,
+    value.user_visible_reason,
+    value.userVisibleReason
+  ]
+    .flatMap((field) => collectUserVisibleStepText(field))
+    .map((text) => text.trim())
+    .filter(Boolean);
+}
+
+function isUnsupportedNonTextInputRequestText(value) {
+  const text = normalizeText(value);
+
+  if (!hasAnyKeyword(text, NON_TEXT_MATERIAL_KEYWORDS)) {
+    return false;
+  }
+
+  if (hasAnyKeyword(text, UNSUPPORTED_NON_TEXT_RECIPIENT_KEYWORDS)) {
+    return true;
+  }
+
+  if (!hasAnyKeyword(text, UNSUPPORTED_NON_TEXT_ACTION_KEYWORDS)) {
+    return false;
+  }
+
+  return !hasAnyKeyword(text, EXTERNAL_NON_TEXT_TARGET_KEYWORDS);
 }
 
 function createTaskId() {

@@ -100,3 +100,10 @@ export function generateResistanceFallbackStep({
     })
   });
 }
+
+export function resolveResistanceWithAi(context) {
+  return requestJson("/api/resolve-resistance", {
+    method: "POST",
+    body: JSON.stringify({ context })
+  });
+}

@@ -67,6 +67,8 @@ function StepCard({
   reEntryPoint,
   resistancePanelOpen,
   resistanceResult,
+  isResolvingResistance,
+  resistanceLoadingMessage,
   sessionSummary,
   errorMessage,
   statusMeta,
@@ -102,7 +104,8 @@ function StepCard({
       appStatus === "executing" ||
       appStatus === "paused");
   const statusCopy = STATUS_COPY[appStatus] || STATUS_COPY.idle;
-  const canSubmitResistanceText = resistanceText.trim().length > 0;
+  const canSubmitResistanceText =
+    resistanceText.trim().length > 0 && !isResolvingResistance;
   const canSubmitClarification = clarificationAnswer.trim().length > 0;
 
   useEffect(() => {
@@ -174,7 +177,14 @@ function StepCard({
         </div>
       )}
 
-      {showCurrentStep && (
+      {isResolvingResistance && (
+        <div className="loading-panel" aria-live="polite">
+          <span className="loading-bar" />
+          <p>{resistanceLoadingMessage}</p>
+        </div>
+      )}
+
+      {showCurrentStep && !isResolvingResistance && (
         <div className="step-focus">
           <div className="step-focus-header">
             <span>{isClarificationStep ? "需要补充信息" : statusCopy.label}</span>
@@ -227,7 +237,7 @@ function StepCard({
         </button>
       )}
 
-      {appStatus === "executing" && (
+      {appStatus === "executing" && !isResolvingResistance && (
         <div className="execution-area">
           <button className="primary-action" onClick={onCompleteCurrentStep}>
             完成当前步骤
@@ -236,6 +246,7 @@ function StepCard({
           <div className="resistance-entry">
             <button
               className="link-button"
+              disabled={isResolvingResistance}
               type="button"
               onClick={onToggleResistancePanel}
             >
@@ -254,6 +265,7 @@ function StepCard({
                       id="resistance-text"
                       type="text"
                       value={resistanceText}
+                      disabled={isResolvingResistance}
                       onChange={(event) =>
                         setResistanceText(event.target.value)
                       }
@@ -276,6 +288,7 @@ function StepCard({
                   {RESISTANCE_OPTIONS.map((option) => (
                     <button
                       className="resistance-option"
+                      disabled={isResolvingResistance}
                       key={option.type}
                       onClick={() => onResistanceSelect(option.type)}
                     >

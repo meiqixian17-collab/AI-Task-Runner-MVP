@@ -15,6 +15,8 @@ ${context.clarificationAnswer || "None"}
 Completed steps:
 ${formatStepHistory(context.stepHistory)}
 
+${formatDuplicateRetryContext(context)}
+
 Generate the single best step the user should execute right now.
 
 Rules:
@@ -27,6 +29,10 @@ Rules:
 7. Action content must be concrete and observable. Do not output vague actions like "先明确你的目标", "先整理你的想法", "先规划一下", "先查找相关资料", "先思考你想要什么", "先制定一个计划", or "先了解一下相关内容".
 8. If the task is already complete, start with [TASK_DONE] and briefly say it is complete.
 9. Respond in the same language as the user's task.
+10. Clarification questions must collect text only.
+11. Do not ask the user to provide, upload, send, paste, or show non-text materials to this system, including photos, screenshots, images, recordings, audio, files, or attachments.
+12. If visual or file information is needed, ask the user to describe the key details in text.
+13. The user's external task may include taking a photo, screenshot, recording, or handling files, but only if the step does not ask the user to give that material to this system.
 
 Return exactly one of these shapes:
 {
@@ -73,13 +79,17 @@ Rules:
 1. Return only valid JSON for one Step object.
 2. The Step type must be either "clarification" or "action".
 3. Do not repeat a completed step.
-4. If information is still insufficient, return a clarification Step and ask exactly one question.
+4. Prefer a safe, low-barrier, text-executable next action. Return a clarification Step only when missing information would make the next action unsafe, non-specific, or dependent on key information the user has not provided.
 5. If enough information exists, return an action Step.
 6. Action content must be concrete and observable. Do not output vague actions like "先明确你的目标", "先整理你的想法", "先规划一下", "先查找相关资料", "先思考你想要什么", "先制定一个计划", or "先了解一下相关内容".
 7. Do not explain theory or provide a long plan.
 8. If the task is complete, start with [TASK_DONE] and briefly say it is complete.
 9. Respond in the same language as the user's task.
 10. When duplicate retry context is present, continue from the previous completed step. The new action must feel like the next natural task-progress step, not a generic fallback or restart.
+11. Clarification questions must collect text only.
+12. Do not ask the user to provide, upload, send, paste, or show non-text materials to this system, including photos, screenshots, images, recordings, audio, files, or attachments.
+13. If visual or file information is needed, ask the user to describe the key details in text.
+14. The user's external task may include taking a photo, screenshot, recording, or handling files, but only if the step does not ask the user to give that material to this system.
 
 Return the same JSON shape as generate-first-step.
 `.trim();
@@ -120,11 +130,8 @@ function formatStepHistory(stepHistory) {
 }
 
 function formatDuplicateRetryContext(context) {
-  if (context.retryReason !== "duplicate_step") {
-    return "";
-  }
-
-  return `
+  if (context.retryReason === "duplicate_step") {
+    return `
 Duplicate retry context:
 - The previous model output was rejected because it repeated an already completed step.
 - Rejected duplicate step: ${context.rejectedStep || "Unknown"}
@@ -133,6 +140,21 @@ Duplicate retry context:
 Retry instruction:
 Generate a new action step that directly continues from the previous completed step. Preserve the user's original task and current task context. Do not restart the task. Do not output a generic fallback such as opening related tools, writing the smallest action, clarifying goals, or making a plan. The user should feel the task is continuing smoothly.
 `.trim();
+  }
+
+  if (context.retryReason === "unsupported_non_text_input_request") {
+    return `
+Unsupported non-text input retry context:
+- The previous model output was rejected because it asked the user to provide, upload, send, paste, or show non-text material to this system.
+- Rejected step/question: ${context.rejectedStep || "Unknown"}
+- Previous completed step to continue from: ${context.previousStep || "Unknown"}
+
+Retry instruction:
+Generate a replacement that uses only text input from the user. If visual or file information is needed, ask the user to describe the key details in text. Do not ask for photos, screenshots, images, recordings, audio, files, attachments, uploads, pasted images, or anything sent to this system. External task actions may still involve photos, screenshots, recordings, or files only when the user does not need to give that material to this system.
+`.trim();
+  }
+
+  return "";
 }
 
 function getReadableStepText(value) {
@@ -333,6 +355,9 @@ Rules:
 9. estimated_effort must be low or medium, preferably low, and never imply more than 5 minutes.
 10. risk_flags should describe the new fallback_step, not copy currentStep.risk_flags blindly.
 11. Return only valid JSON.
+12. Do not ask the user to provide, upload, send, paste, or show non-text materials to this system, including photos, screenshots, images, recordings, audio, files, or attachments.
+13. If visual or file information is needed, ask the user to describe the key details in text.
+14. The user's external task may include taking a photo, screenshot, recording, or handling files, but only if the step does not ask the user to give that material to this system.
 
 Strategy rules:
 - safe_draft_before_contact: write an unsent private draft. Do not open chat apps, contact, or send. completion_criteria must say no sending is needed.
@@ -360,6 +385,131 @@ Return exactly this JSON shape:
     "estimated_effort": "low | medium",
     "stage": "start | clarify | execute | review | finish",
     "risk_flags": ["string"],
+    "user_visible_reason": "one short sentence"
+  }
+}
+`.trim();
+}
+
+export function generateResistanceResolutionPrompt(context) {
+  return `
+You are the AI Resistance Resolution Layer for a task-start and task-progress system.
+
+Resolve the user's current stuck point in one pass. Return diagnosis, recoveryPlan, and one fallback_step.
+
+Context JSON:
+${JSON.stringify(context, null, 2)}
+
+${formatDuplicateRetryContext(context)}
+
+Core rules:
+1. Diagnose only task-internal resistance. Do not infer personality, long-term psychology, childhood, trauma, or deep motives.
+2. The recoveryPlan must inherit the diagnosis and must not overturn primary_root_cause.
+3. The fallback_step must follow the recoveryPlan, preserve the original task goal, and reduce resistance.
+4. Generate one specific user-visible action only. Do not generate multiple options or a large multi-step plan.
+5. step_text and completion_criteria must be concrete, low-pressure, conversational, and easy to know when done.
+6. Do not expose root_cause labels to the user.
+7. Do not use vague phrases like "organize your thoughts", "optimize", "prepare fully", "adjust your mindset", "try maybe", or "you can try".
+8. estimated_effort must be low or medium, preferably low, and never imply more than 5 minutes.
+9. Return only valid JSON.
+10. Do not ask the user to provide, upload, send, paste, or show non-text materials to this system, including photos, screenshots, images, recordings, audio, files, or attachments.
+11. If visual or file information is needed, ask the user to describe the key details in text.
+12. The user's external task may include taking a photo, screenshot, recording, or handling files, but only if the step does not ask the user to give that material to this system.
+
+Allowed surface_resistance values:
+- too_hard
+- dont_want
+- not_sure
+- bad_state
+
+Allowed root cause values:
+- unclear_output
+- too_large
+- emotional_pressure
+- social_pressure
+- perfectionism
+- physical_low_energy
+- value_uncertainty
+
+Allowed strategy guidance:
+- unclear_output: strategy_name "output_clarification"; clarify the smallest output, first sentence, option, or structure.
+- too_large: strategy_name "micro_start" or "first_physical_action"; keep only the first smallest action.
+- emotional_pressure: strategy_name "pressure_source_removal" or "safe_draft_before_contact"; remove direct exposure to the pressure source.
+- social_pressure: strategy_name "safe_draft_before_contact"; reduce social exposure with a draft that is not sent.
+- perfectionism: strategy_name "low_quality_draft"; lower quality standards and avoid showing/publishing.
+- physical_low_energy: strategy_name "energy_saving_restart" or "first_physical_action"; reduce body cost and preserve a resume point.
+- value_uncertainty: strategy_name "minimum_value_check"; do not force execution; run a small value check.
+
+Hard safety constraints:
+- If the user says they do not know what to write/say/do, where to start, which angle to use, which content to include, or that their mind is messy, choose surface_resistance "too_hard", not "not_sure".
+- Use "not_sure" only when the user questions task value, usefulness, payoff, whether it is worth continuing, or whether to continue at all.
+- For emotional_pressure or social_pressure in contact/message contexts, recoveryPlan and fallback_step must remove direct contact/send/open-chat pressure. Do not suggest opening the chat, sending, testing the other person's reaction, or bravely facing it. Prefer a safe private unsent draft.
+- For physical_low_energy, if the plan preserves a resume point or says not to stand/move, fallback_step must not ask the user to stand, walk, go out, put shoes by the door, move objects, or complete the original physical action.
+
+Allowed action_type values:
+open, write, select, prepare, contact, move, review, decide
+
+Allowed estimated_effort values:
+low, medium
+
+Allowed pressure_reduced values:
+emotional_pressure, social_exposure, output_uncertainty, task_size, quality_pressure, physical_energy_cost, value_uncertainty, decision_cost
+
+Allowed stage values:
+start, clarify, execute, review, finish
+
+Return exactly this JSON shape:
+{
+  "diagnosis": {
+    "surface_resistance": "too_hard | dont_want | not_sure | bad_state",
+    "primary_root_cause": "unclear_output | too_large | emotional_pressure | social_pressure | perfectionism | physical_low_energy | value_uncertainty",
+    "secondary_root_cause": "unclear_output | too_large | emotional_pressure | social_pressure | perfectionism | physical_low_energy | value_uncertainty | null",
+    "user_state_summary": "one sentence",
+    "evidence": ["2 to 4 context-grounded strings"],
+    "excluded_causes": [
+      {
+        "cause": "string",
+        "reason": "string"
+      }
+    ],
+    "confidence": "low | medium | high",
+    "recovery_direction": "string",
+    "avoid": ["at least 2 strings"]
+  },
+  "recoveryPlan": {
+    "based_on": {
+      "primary_root_cause": "string",
+      "secondary_root_cause": "string or null",
+      "recovery_direction": "string",
+      "key_evidence": ["2 to 3 strings from diagnosis.evidence"]
+    },
+    "strategy_name": "string",
+    "strategy_goal": "string",
+    "recovery_principle": "string",
+    "action_shift": {
+      "from": "string from currentStep.step_text",
+      "to": "string"
+    },
+    "pressure_reduced": ["at least 1 allowed pressure_reduced value"],
+    "target_user_state": "string",
+    "avoid": ["at least 2 strings, preserving diagnosis.avoid"],
+    "fallback_step_requirements": {
+      "action_type": "open | write | select | prepare | contact | move | review | decide",
+      "estimated_effort": "low | medium",
+      "completion_boundary_required": true,
+      "must_preserve_goal": true,
+      "should_remove_pressure_source": true,
+      "should_avoid_original_blocker": true
+    },
+    "diagnosis_warning": null
+  },
+  "fallback_step": {
+    "step_text": "string",
+    "completion_criteria": "string",
+    "action_type": "open | write | select | prepare | contact | move | review | decide",
+    "estimated_effort": "low | medium",
+    "stage": "start | clarify | execute | review | finish",
+    "risk_flags": ["0 to 4 allowed root cause values"],
     "user_visible_reason": "one short sentence"
   }
 }
