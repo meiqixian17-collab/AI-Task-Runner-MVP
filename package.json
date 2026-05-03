@@ -9,8 +9,12 @@
     "build": "npm --prefix client run build",
     "test:resistance": "npm --prefix client run test:resistance",
     "test:quality": "npm --prefix client run test:quality",
+    "test:duplicate": "npm --prefix client run test:duplicate",
+    "test:duplicate-retry": "npm --prefix client run test:duplicate-retry",
+    "test:prompt": "npm --prefix server run test:prompt",
+    "test:completion": "npm --prefix client run test:completion",
     "test:simple": "npm --prefix client run test:simple",
-    "test:all": "npm run build && npm run test:simple && npm run test:quality && npm run test:resistance"
+    "test:all": "npm run build && npm run test:simple && npm run test:duplicate && npm run test:duplicate-retry && npm run test:prompt && npm run test:completion && npm run test:quality && npm run test:resistance"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

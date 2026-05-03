@@ -8,6 +8,9 @@
     "preview": "vite preview",
     "test:resistance": "node scripts/test-resistance-pipeline.mjs",
     "test:quality": "node scripts/test-quality-gates.mjs",
+    "test:duplicate": "node scripts/test-step-duplicate.mjs",
+    "test:duplicate-retry": "node scripts/test-duplicate-retry.mjs",
+    "test:completion": "node scripts/test-task-completion-rules.mjs",
     "test:simple": "node scripts/test-simple-task-completion.mjs"
   },
   "dependencies": {

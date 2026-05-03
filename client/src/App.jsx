@@ -18,6 +18,12 @@ import {
   createSimpleFinishingStep,
   shouldAskSimpleTaskCompletion
 } from "./simpleTaskCompletion.mjs";
+import {
+  MAX_DUPLICATE_RETRY_COUNT,
+  buildDuplicateRetryContext,
+  getDuplicateStepDecision
+} from "./duplicateRetry.mjs";
+import { isDuplicateStepEntry } from "./stepDuplicate.mjs";
 import StepCard from "./StepCard.jsx";
 
 const APP_STATUS = {
@@ -34,6 +40,17 @@ const GENERATION_SOURCE = {
   NONE: "",
   AI: "ai",
   FALLBACK: "fallback"
+};
+
+const STEP_SOURCE = {
+  AI: "ai",
+  DUPLICATE_RETRY: "duplicate_retry",
+  DUPLICATE_FALLBACK: "duplicate_fallback",
+  LOCAL_RULE: "local_rule",
+  GENERIC_FALLBACK: "generic_fallback",
+  RESISTANCE_AI: "resistance_ai",
+  RESISTANCE_TEMPLATE: "resistance_template",
+  LEGACY_RECOVERY: "legacy_recovery"
 };
 
 const RE_ENTRY_STORAGE_KEY = "ai-task-runner-re-entry-point";
@@ -81,13 +98,13 @@ const CLARIFICATION_RULES = {
     {
       key: "brand_name",
       question: "告诉我你的店铺或品牌叫什么名字？",
-      placeholder: "例如：小鹿咖啡 / 山野杂货铺",
+      placeholder: "Example: cafe name / shop name",
       required: true
     },
     {
       key: "business_type",
       question: "这个店铺主要卖什么？",
-      placeholder: "例如：咖啡、手作饰品、宠物用品",
+      placeholder: "Example: coffee, handmade accessories, pet supplies",
       required: true
     }
   ],
@@ -95,13 +112,13 @@ const CLARIFICATION_RULES = {
     {
       key: "recipient",
       question: "这条消息是发给谁的？",
-      placeholder: "例如：老师、同学、HR、朋友",
+      placeholder: "Example: teacher, classmate, HR, friend",
       required: true
     },
     {
       key: "message_goal",
       question: "你希望这条消息达到什么目的？",
-      placeholder: "例如：请假、道歉、询问进度、解释情况",
+      placeholder: "Example: ask leave, apologize, ask progress",
       required: true
     }
   ],
@@ -109,7 +126,7 @@ const CLARIFICATION_RULES = {
     {
       key: "target_position",
       question: "这份简历主要投什么岗位？",
-      placeholder: "例如：AI产品实习生、UI设计实习生",
+      placeholder: "Example: AI product intern, UI design intern",
       required: true
     }
   ],
@@ -117,7 +134,7 @@ const CLARIFICATION_RULES = {
     {
       key: "current_stage",
       question: "你的作品集现在做到哪一步了？",
-      placeholder: "例如：还没选项目 / 已有项目但没整理 / 正在做版式",
+      placeholder: "Example: not selected / selected but not organized",
       required: true
     }
   ],
@@ -133,7 +150,7 @@ const CLARIFICATION_RULES = {
     {
       key: "focus_area",
       question: "你现在最想先推进哪一部分？",
-      placeholder: "例如：学习 / 找工作 / 健康 / 做项目",
+      placeholder: "Example: study, job search, health, project",
       required: true
     }
   ],
@@ -141,7 +158,7 @@ const CLARIFICATION_RULES = {
     {
       key: "task_object",
       question: "你要处理的具体对象是什么？",
-      placeholder: "例如：一份报告 / 一个页面 / 一批课程资料",
+      placeholder: "Example: report, page, course material",
       required: true
     }
   ],
@@ -157,7 +174,7 @@ const CLARIFICATION_RULES = {
     {
       key: "concrete_task",
       question: "你希望我先帮你推进哪一个具体任务？",
-      placeholder: "例如：列考研利弊 / 找 3 个岗位 / 写一个赚钱方案草稿",
+      placeholder: "Example: list pros and cons / find 3 roles",
       required: true
     }
   ]
@@ -586,6 +603,8 @@ function MyTasksPage({
     tasks.find((task) => task.id === menuTaskId) || null;
   const deleteConfirmTask =
     tasks.find((task) => task.id === deleteConfirmTaskId) || null;
+  const isActiveMenuTaskCompleted =
+    activeMenuTask?.status === APP_STATUS.COMPLETED;
   const sortedTasks = [...tasks].sort((firstTask, secondTask) => {
     if (firstTask.isImportant === secondTask.isImportant) {
       return 0;
@@ -679,7 +698,7 @@ function MyTasksPage({
       {tasks.length === 0 ? (
         <section className="surface-card tasks-empty" aria-live="polite">
           <h2>还没有任务</h2>
-          <p>创建一个任务，让 AI 帮你迈出第一步</p>
+          <p>创建一个任务，让 AI 帮你迈出第一步。</p>
         </section>
       ) : (
         <>
@@ -768,7 +787,7 @@ function MyTasksPage({
                       completedOpen ? " completed-tasks-chevron--open" : ""
                     }`}
                   >
-                    ›
+                    &gt;
                   </span>
                 </span>
               </button>
@@ -781,10 +800,21 @@ function MyTasksPage({
                     return (
                       <li className="completed-task-row" key={task.id}>
                         <button
-                          aria-label={`打开${task.title || "未命名任务"}的任务菜单`}
+                          aria-label={`查看${task.title || "未命名任务"}的完成记录`}
                           className="completed-task-item"
                           type="button"
-                          onClick={() => openTaskMenu(task.id)}
+                          onClick={() => handleTaskClick(task.id)}
+                          onContextMenu={(event) => {
+                            event.preventDefault();
+                            openTaskMenu(task.id);
+                          }}
+                          onMouseDown={() => startLongPress(task.id)}
+                          onMouseLeave={() => clearLongPress(task.id)}
+                          onMouseUp={() => clearLongPress(task.id)}
+                          onTouchCancel={() => clearLongPress(task.id)}
+                          onTouchEnd={() => clearLongPress(task.id)}
+                          onTouchMove={() => clearLongPress(task.id)}
+                          onTouchStart={() => startLongPress(task.id)}
                         >
                           <strong>{task.title || "未命名任务"}</strong>
                           <span className={`status-pill status-pill--${statusMeta.tone}`}>
@@ -814,9 +844,11 @@ function MyTasksPage({
             onClick={(event) => event.stopPropagation()}
           >
             <h2 id="task-menu-title">{activeMenuTask.title || "未命名任务"}</h2>
-            <button type="button" onClick={handleToggleImportant}>
-              {activeMenuTask.isImportant ? "取消重要" : "标记为重要"}
-            </button>
+            {!isActiveMenuTaskCompleted && (
+              <button type="button" onClick={handleToggleImportant}>
+                {activeMenuTask.isImportant ? "取消重要" : "标记为重要"}
+              </button>
+            )}
             <button
               className="danger-action"
               type="button"
@@ -844,7 +876,7 @@ function MyTasksPage({
             onClick={(event) => event.stopPropagation()}
           >
             <h2 id="delete-task-title">确定删除这个任务吗？</h2>
-            <p>删除后无法恢复</p>
+            <p>删除后无法恢复。</p>
             <div className="confirm-actions">
               <button type="button" onClick={() => setDeleteConfirmTaskId(null)}>
                 取消
@@ -1075,7 +1107,13 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
       return;
     }
 
-    const nextHistory = [...stepHistory, finishedStep];
+    const completedStep =
+      normalizeHistoryStep(currentStep || finishedStep, {
+        taskTitle: taskInput,
+        taskType: getTaskType(taskInput),
+        stage: currentStep?.stage || "execute"
+      }) || finishedStep;
+    const nextHistory = [...stepHistory, completedStep];
     const nextStepIndex = task.stepIndex + 1;
 
     updateCurrentTask({
@@ -1225,7 +1263,9 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
           ? await generateFirstStep(generationPayload)
           : await generateNextStep(generationPayload, stepHistory);
 
-      await applyGeneratedStep(data, taskInput, stepHistory);
+      await applyGeneratedStep(data, taskInput, stepHistory, {
+        taskContext: nextTaskContext
+      });
     } catch (error) {
       applyFallbackStep(taskInput, error, stepHistory);
     }
@@ -1240,7 +1280,7 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
     if (!data?.isTaskComplete && isInvalidStep(data?.step)) {
       applyFallbackStep(
         taskTitle,
-        new Error("AI returned an empty or invalid step."),
+        new Error("AI 返回了空步骤或无效步骤。"),
         historyForCompare
       );
       return;
@@ -1250,46 +1290,111 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
       ? ""
       : normalizeCurrentStep(data.step || "", {
           taskTitle,
-          stage: historyForCompare.length === 0 ? "start" : "execute"
-    });
+          stage: historyForCompare.length === 0 ? "start" : "execute",
+          source: options.stepSource || STEP_SOURCE.AI,
+          sourceReason:
+            options.sourceReason || "Generated by the AI step endpoint."
+        });
+    const effectiveTaskContext =
+      options.taskContext && typeof options.taskContext === "object"
+        ? options.taskContext
+        : task.taskContext;
 
-    if (!data.isTaskComplete && isDuplicateStep(nextStep, historyForCompare)) {
-      if (
-        shouldAskSimpleTaskCompletion({
-          taskTitle,
-          stepHistory: historyForCompare,
-          isDuplicate: true
-        })
-      ) {
+    if (
+      !data.isTaskComplete &&
+      isAnsweredClarificationStep(nextStep, effectiveTaskContext)
+    ) {
+      const immediateActionStep = maybeGenerateImmediateActionStep({
+        title: taskTitle,
+        taskContext: effectiveTaskContext
+      });
+
+      if (immediateActionStep) {
+        updateCurrentTask({
+          currentStep: immediateActionStep,
+          status: APP_STATUS.READY,
+          sessionSummary: "",
+          errorMessage: "",
+          generationSource: GENERATION_SOURCE.FALLBACK,
+          reEntryPoint: null,
+          resistancePanelOpen: false,
+          selectedResistanceType: "",
+          resistanceFeedback: "",
+          interruptedStep: "",
+          resistanceDiagnosis: null,
+          resistanceResolution: null
+        });
+        clearSavedReEntryPoint();
+        return;
+      }
+
+      applyFallbackStep(
+        taskTitle,
+        new Error("AI repeated a clarification that was already answered."),
+        historyForCompare
+      );
+      return;
+    }
+
+    if (!data.isTaskComplete) {
+      const duplicateDecision = getDuplicateStepDecision({
+        nextStep,
+        historyForCompare,
+        taskTitle,
+        duplicateRetryCount: options.duplicateRetryCount,
+        rejectedSteps: options.rejectedSteps,
+        isDuplicateStep,
+        shouldAskSimpleTaskCompletion,
+        getStepText
+      });
+
+      if (duplicateDecision.action === "complete") {
         showSimpleTaskCompletionConfirmation(taskTitle);
         return;
       }
 
-      if (options.retryDuplicate !== false && historyForCompare.length > 0) {
+      if (duplicateDecision.action === "retry") {
         try {
           setLoadingMessage("正在根据上一步重新生成下一步");
           const retryData = await regenerateAfterDuplicateStep({
             taskTitle,
             rejectedStep: nextStep,
-            historyForCompare
+            historyForCompare,
+            taskContext: effectiveTaskContext,
+            duplicateRetryCount: duplicateDecision.nextDuplicateRetryCount,
+            rejectedSteps: duplicateDecision.rejectedSteps
           });
 
           await applyGeneratedStep(retryData, taskTitle, historyForCompare, {
-            retryDuplicate: false
+            ...options,
+            duplicateRetryCount: duplicateDecision.nextDuplicateRetryCount,
+            rejectedSteps: duplicateDecision.rejectedSteps,
+            stepSource: STEP_SOURCE.DUPLICATE_RETRY,
+            sourceReason: `Regenerated after duplicate-step rejection (${duplicateDecision.nextDuplicateRetryCount}/${MAX_DUPLICATE_RETRY_COUNT}).`
           });
           return;
         } catch (error) {
-          applyFallbackStep(taskTitle, error, historyForCompare);
+          applyDuplicateFallbackStep(
+            taskTitle,
+            historyForCompare,
+            error?.message
+              ? `重复步骤重试失败：${error.message}`
+              : "重复步骤重试失败。"
+          );
           return;
         }
       }
 
-      applyFallbackStep(
-        taskTitle,
-        new Error("AI returned a duplicate step."),
-        historyForCompare
-      );
-      return;
+      if (duplicateDecision.action === "fallback") {
+        applyDuplicateFallbackStep(
+          taskTitle,
+          historyForCompare,
+          duplicateDecision.duplicateRetryCount >= MAX_DUPLICATE_RETRY_COUNT
+            ? "AI 重试后仍然返回了重复步骤。"
+            : "AI 生成了重复步骤。"
+        );
+        return;
+      }
     }
 
     if (
@@ -1307,7 +1412,9 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
 
           await applyGeneratedStep(retryData, taskTitle, historyForCompare, {
             ...options,
-            retryUnsupportedNonText: false
+            retryUnsupportedNonText: false,
+            sourceReason:
+              "Regenerated after unsupported non-text input request."
           });
           return;
         } catch (error) {
@@ -1345,7 +1452,9 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
     updateCurrentTask({
       currentStep: normalizeCurrentStep(createSimpleCompletionStep(taskTitle), {
         taskTitle,
-        stage: "finish"
+        stage: "finish",
+        source: STEP_SOURCE.LOCAL_RULE,
+        sourceReason: "Simple task entered local completion confirmation."
       }),
       status: APP_STATUS.READY,
       sessionSummary: "",
@@ -1384,7 +1493,9 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
     updateCurrentTask({
       currentStep: normalizeCurrentStep(createSimpleFinishingStep(taskInput), {
         taskTitle: taskInput,
-        stage: "finish"
+        stage: "finish",
+        source: STEP_SOURCE.LOCAL_RULE,
+        sourceReason: "Simple task generated a local final-step prompt."
       }),
       status: APP_STATUS.READY,
       sessionSummary: "",
@@ -1404,20 +1515,23 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
   function regenerateAfterDuplicateStep({
     taskTitle,
     rejectedStep,
-    historyForCompare
+    historyForCompare,
+    taskContext,
+    duplicateRetryCount,
+    rejectedSteps
   }) {
     return generateNextStep(
       buildTaskGenerationPayload({
         taskTitle,
-        taskContext: task.taskContext,
+        taskContext: taskContext || task.taskContext,
         stepHistory: historyForCompare,
-        duplicateRetry: {
-          retryReason: "duplicate_step",
-          rejectedStep: getStepText(rejectedStep),
-          previousStep: getStepText(
-            historyForCompare[historyForCompare.length - 1]
-          )
-        }
+        duplicateRetry: buildDuplicateRetryContext({
+          rejectedStep,
+          historyForCompare,
+          duplicateRetryCount,
+          rejectedSteps,
+          getStepText
+        })
       }),
       historyForCompare
     );
@@ -1447,11 +1561,39 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
 
   function applyFallbackStep(taskTitle, error, historyForCompare = stepHistory) {
     updateCurrentTask({
-      currentStep: getNonDuplicateFallbackStep(taskTitle, historyForCompare),
+      currentStep: withStepSource(
+        getNonDuplicateFallbackStep(taskTitle, historyForCompare),
+        STEP_SOURCE.GENERIC_FALLBACK,
+        error?.message
+          ? `生成失败后启用通用备用步骤：${error.message}`
+          : "生成失败后启用通用备用步骤。"
+      ),
       status: APP_STATUS.READY,
       generationSource: GENERATION_SOURCE.FALLBACK,
-      sessionSummary: "AI 生成失败或超时，系统已启用 fallback 步骤。",
-      errorMessage: `已启用 fallback：${error.message}`,
+      sessionSummary: "AI 生成失败或超时，系统已启用备用步骤。",
+      errorMessage: "已启用备用步骤：AI 生成失败或超时。",
+      reEntryPoint: null,
+      resistancePanelOpen: false,
+      selectedResistanceType: "",
+      resistanceFeedback: "",
+      interruptedStep: "",
+      resistanceDiagnosis: null,
+      resistanceResolution: null
+    });
+    clearSavedReEntryPoint();
+  }
+
+  function applyDuplicateFallbackStep(
+    taskTitle,
+    historyForCompare = stepHistory,
+    reason = "AI 生成了重复步骤。"
+  ) {
+    updateCurrentTask({
+      currentStep: getDuplicateFallbackStep(taskTitle, historyForCompare, reason),
+      status: APP_STATUS.READY,
+      generationSource: GENERATION_SOURCE.FALLBACK,
+      sessionSummary: "AI 生成了重复步骤，系统已改用本地备用步骤。",
+      errorMessage: `已启用备用步骤：${reason}`,
       reEntryPoint: null,
       resistancePanelOpen: false,
       selectedResistanceType: "",
@@ -1572,7 +1714,7 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
                 code: "unsupported_non_text_input_request",
                 severity: "error",
                 message:
-                  "AI fallback step requested unsupported non-text input."
+                  "AI 备用步骤要求了不支持的非文本输入。"
               }
             ]
           },
@@ -1580,7 +1722,7 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
           final_source: "template_fallback"
         };
         console.warn(
-          "[debugResistanceTrace] AI fallback step requested unsupported non-text input"
+          "[debugResistanceTrace] AI 备用步骤要求了不支持的非文本输入"
         );
       } else {
         const evaluation = evaluateAiFallbackStep(
@@ -1652,6 +1794,10 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
         recovery_mode: resistanceResolution.recovery_decision.recovery_mode,
         fallback_step: resistanceResolution.fallback_step
       };
+      const resistanceStepSource = getResistanceStepSource(
+        resistanceResolution.debugResistanceTrace?.fallbackStepGeneration
+          ?.final_source
+      );
 
       updateCurrentTask({
         status: APP_STATUS.EXECUTING,
@@ -1661,7 +1807,11 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
           type || getPipelineLegacyResistanceType(diagnosis.surface_resistance),
         resistanceFeedback: getPipelineDiagnosisFeedback(diagnosis),
         interruptedStep: currentStep,
-        currentStep: resistanceResolution.fallback_step,
+        currentStep: withStepSource(
+          resistanceResolution.fallback_step,
+          resistanceStepSource,
+          "Generated by the resistance recovery flow."
+        ),
         resistanceDiagnosis: legacyDiagnosis,
         resistanceResolution,
         reEntryPoint: null,
@@ -1764,40 +1914,42 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
           )}
         </section>
 
-        <StepCard
-          appStatus={appStatus}
-          currentStep={currentStep}
-          currentStepNumber={currentStepNumber}
-          loadingMessage={loadingMessage}
-          generationSource={task.generationSource}
-          isUsingFallback={isUsingFallback}
-          reEntryPoint={task.reEntryPoint}
-          resistancePanelOpen={task.resistancePanelOpen}
-          resistanceResult={resistanceResult}
-          isResolvingResistance={isResolvingResistance}
-          resistanceLoadingMessage={resistanceLoadingMessage}
-          sessionSummary={task.sessionSummary}
-          errorMessage={task.errorMessage}
-          statusMeta={statusMeta}
-          onStartExecuting={handleStartExecuting}
-          onResumeCurrentStep={handleResumeCurrentStep}
-          onCompleteCurrentStep={handleCompleteCurrentStep}
-          onConfirmSimpleTaskComplete={handleConfirmSimpleTaskComplete}
-          onRequestSimpleTaskFinalStep={handleRequestSimpleTaskFinalStep}
-          onSubmitClarificationAnswer={handleSubmitClarificationAnswer}
-          onToggleResistancePanel={toggleResistancePanel}
-          onResistanceSelect={handleResistanceSelect}
-          onResistanceTextSubmit={handleResistanceTextSubmit}
-          onExit={onBack}
-          onReset={handleReset}
-        />
+        {appStatus !== APP_STATUS.COMPLETED && (
+          <StepCard
+            appStatus={appStatus}
+            currentStep={currentStep}
+            currentStepNumber={currentStepNumber}
+            loadingMessage={loadingMessage}
+            generationSource={task.generationSource}
+            isUsingFallback={isUsingFallback}
+            reEntryPoint={task.reEntryPoint}
+            resistancePanelOpen={task.resistancePanelOpen}
+            resistanceResult={resistanceResult}
+            isResolvingResistance={isResolvingResistance}
+            resistanceLoadingMessage={resistanceLoadingMessage}
+            sessionSummary={task.sessionSummary}
+            errorMessage={task.errorMessage}
+            statusMeta={statusMeta}
+            onStartExecuting={handleStartExecuting}
+            onResumeCurrentStep={handleResumeCurrentStep}
+            onCompleteCurrentStep={handleCompleteCurrentStep}
+            onConfirmSimpleTaskComplete={handleConfirmSimpleTaskComplete}
+            onRequestSimpleTaskFinalStep={handleRequestSimpleTaskFinalStep}
+            onSubmitClarificationAnswer={handleSubmitClarificationAnswer}
+            onToggleResistancePanel={toggleResistancePanel}
+            onResistanceSelect={handleResistanceSelect}
+            onResistanceTextSubmit={handleResistanceTextSubmit}
+            onExit={onBack}
+            onReset={handleReset}
+          />
+        )}
 
         <section
           className="surface-card progress-panel"
           aria-labelledby="progress-title"
         >
           <div className="section-heading">
-            <p className="section-kicker">推进记录</p>
+            <p className="section-kicker">进度记录</p>
             <h2 id="progress-title">当前进度</h2>
           </div>
 
@@ -1817,9 +1969,9 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
           ) : (
             <ol className="timeline">
               {stepHistory.map((step, index) => (
-                <li key={`${step}-${index}`}>
+                <li key={`${getStepText(step)}-${index}`}>
                   <span>{index + 1}</span>
-                  <p>{step}</p>
+                  <p>{getStepText(step)}</p>
                 </li>
               ))}
             </ol>
@@ -1858,16 +2010,59 @@ function createTask(overrides = {}) {
   });
 }
 
+function withStepSource(step, source, sourceReason = "") {
+  if (!step || typeof step !== "object" || Array.isArray(step)) {
+    return step;
+  }
+
+  return {
+    ...step,
+    source: step.source || source,
+    source_reason: step.source_reason || sourceReason
+  };
+}
+
+function getSavedTaskStepSource(task) {
+  if (task?.currentStep?.source) {
+    return task.currentStep.source;
+  }
+
+  if (task?.generationSource === GENERATION_SOURCE.AI) {
+    return STEP_SOURCE.AI;
+  }
+
+  if (task?.generationSource === GENERATION_SOURCE.FALLBACK) {
+    return STEP_SOURCE.GENERIC_FALLBACK;
+  }
+
+  return "";
+}
+
+function getResistanceStepSource(finalSource) {
+  if (finalSource === "ai_generated") {
+    return STEP_SOURCE.RESISTANCE_AI;
+  }
+
+  if (finalSource === "template_fallback") {
+    return STEP_SOURCE.RESISTANCE_TEMPLATE;
+  }
+
+  return STEP_SOURCE.LEGACY_RECOVERY;
+}
+
 function normalizeTask(task) {
   const now = new Date().toISOString();
   const taskTitle = task.title || "";
   const taskType = getTaskType(taskTitle);
-  const stepHistory = Array.isArray(task.stepHistory)
-    ? task.stepHistory.map((step) => getStepText(step)).filter(Boolean)
-    : [];
-  const currentStep = normalizeCurrentStep(task.currentStep || "", {
+  const stepHistory = normalizeStepHistory(task.stepHistory, {
     taskTitle,
     taskType
+  });
+  const currentStep = normalizeCurrentStep(task.currentStep || "", {
+    taskTitle,
+    taskType,
+    source: getSavedTaskStepSource(task),
+    sourceReason: "Loaded from saved task state."
   });
   const shouldRecoverMissingStep =
     taskTitle &&
@@ -1880,7 +2075,10 @@ function normalizeTask(task) {
       ? normalizeCurrentStep(getFallbackStep(taskTitle), {
           taskTitle,
           taskType,
-          stage: stepHistory.length === 0 ? "start" : "execute"
+          stage: stepHistory.length === 0 ? "start" : "execute",
+          source: STEP_SOURCE.LEGACY_RECOVERY,
+          sourceReason:
+            "Recovered from a broken or missing saved current step."
         })
       : currentStep;
   const interruptedStep = normalizeCurrentStep(task.interruptedStep || "", {
@@ -1951,6 +2149,17 @@ function normalizeTaskContext(value) {
   );
 }
 
+function isAnsweredClarificationStep(step, taskContext) {
+  if (!step || typeof step !== "object" || step.step_type !== "clarification") {
+    return false;
+  }
+
+  const context = normalizeTaskContext(taskContext);
+  const clarificationKey = String(step.clarification_key || "").trim();
+
+  return Boolean(clarificationKey && context[clarificationKey]);
+}
+
 function maybeGenerateClarificationStep(task) {
   const taskType = detectClarificationTaskType(task.title);
   const rules = CLARIFICATION_RULES[taskType];
@@ -1982,7 +2191,9 @@ function maybeGenerateClarificationStep(task) {
     },
     {
       taskTitle: task.title,
-      stage: "clarify"
+      stage: "clarify",
+      source: STEP_SOURCE.LOCAL_RULE,
+      sourceReason: "Generated by the local clarification rule set."
     }
   );
 }
@@ -2010,7 +2221,9 @@ function maybeGenerateImmediateActionStep(task) {
       },
       {
         taskTitle,
-        stage: "start"
+        stage: "start",
+        source: STEP_SOURCE.LOCAL_RULE,
+        sourceReason: "Generated by a local immediate-action rule."
       }
     );
   }
@@ -2032,7 +2245,9 @@ function maybeGenerateImmediateActionStep(task) {
       },
       {
         taskTitle,
-        stage: "start"
+        stage: "start",
+        source: STEP_SOURCE.LOCAL_RULE,
+        sourceReason: "Generated by a local immediate-action rule."
       }
     );
   }
@@ -2162,7 +2377,24 @@ function buildTaskGenerationPayload({
       ? {
           retryReason: String(duplicateRetry.retryReason || "").trim(),
           rejectedStep: getStepText(duplicateRetry.rejectedStep),
-          previousStep: getStepText(duplicateRetry.previousStep)
+          previousStep: getStepText(duplicateRetry.previousStep),
+          recentCompletedSteps: Array.isArray(
+            duplicateRetry.recentCompletedSteps
+          )
+            ? duplicateRetry.recentCompletedSteps
+                .map((step) => getStepText(step))
+                .filter(Boolean)
+            : [],
+          duplicateRetryCount: Number.isFinite(
+            Number(duplicateRetry.duplicateRetryCount)
+          )
+            ? Math.max(0, Math.floor(Number(duplicateRetry.duplicateRetryCount)))
+            : 0,
+          rejectedSteps: Array.isArray(duplicateRetry.rejectedSteps)
+            ? duplicateRetry.rejectedSteps
+                .map((step) => getStepText(step))
+                .filter(Boolean)
+            : []
         }
       : null;
 
@@ -2279,7 +2511,7 @@ function readSavedTasks() {
   }
 
   return [
-    createTask({
+    normalizeTask(createTask({
       title: savedReEntryPoint.task,
       status: APP_STATUS.PAUSED,
       currentStep: savedReEntryPoint.currentStep,
@@ -2287,7 +2519,7 @@ function readSavedTasks() {
       stepHistory: savedReEntryPoint.stepHistory,
       sessionSummary: savedReEntryPoint.reEntryHint || "",
       reEntryPoint: savedReEntryPoint
-    })
+    }))
   ];
 }
 
@@ -2319,7 +2551,7 @@ function getTaskListDetail(task) {
 
   if (task.status === APP_STATUS.COMPLETED) {
     return {
-      summary: `${statusMeta.label} · 共 ${task.stepHistory.length} 步`,
+      summary: `${statusMeta.label} - 已完成 ${task.stepHistory.length} 步`,
       timeText
     };
   }
@@ -2329,10 +2561,11 @@ function getTaskListDetail(task) {
   const stepLabel = hasCurrentOrPendingStep
     ? `第 ${task.stepIndex + 1} 步`
     : `已完成 ${task.stepHistory.length} 步`;
-  const summary = getStepText(task.currentStep) || "等待生成第一步";
+  const rawSummary = getStepText(task.currentStep);
+  const summary = getSafeDisplayText(rawSummary, "等待生成第一步");
 
   return {
-    summary: `${statusMeta.label} · ${stepLabel} · ${summary}`,
+    summary: `${statusMeta.label} - ${stepLabel} - ${summary}`,
     timeText
   };
 }
@@ -2346,7 +2579,32 @@ function getTaskStatusIcon(status) {
     return "○";
   }
 
-  return "●";
+  return "○";
+}
+
+function getSafeDisplayText(value, fallback = "") {
+  const text = String(value || "").trim();
+
+  if (!text || isMojibakeText(text)) {
+    return fallback;
+  }
+
+  return text;
+}
+
+function isMojibakeText(value) {
+  const text = String(value || "");
+
+  if (!text) {
+    return false;
+  }
+
+  const mojibakeSignals =
+    text.match(/[\u93b4\u6220\u6b91\u6d60\u8bf2\u59df\u6d93\u7ed7\u59dd\u6b12\u7ded\u934f\u6fc8\u7cba\u93c4\u951b]/g) ||
+    [];
+  const replacementSignals = text.match(/[\uFFFD]/g) || [];
+
+  return mojibakeSignals.length >= 3 || replacementSignals.length > 0;
 }
 
 function formatRelativeTime(value) {
@@ -2407,55 +2665,7 @@ function isInvalidStep(step) {
 }
 
 function isDuplicateStep(nextStep, history) {
-  const nextText = normalizeStepForCompare(getStepText(nextStep));
-
-  if (!nextText || !Array.isArray(history)) {
-    return false;
-  }
-
-  return history.some((historyStep) => {
-    const historyText = normalizeStepForCompare(getStepText(historyStep));
-
-    if (!historyText) {
-      return false;
-    }
-
-    return (
-      nextText === historyText ||
-      nextText.includes(historyText) ||
-      historyText.includes(nextText) ||
-      getTextOverlapRatio(nextText, historyText) > 0.85
-    );
-  });
-}
-
-function normalizeStepForCompare(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/[\s\u3000]/g, "")
-    .replace(/[.,!?;:'"()[\]{}，。！？；：“”‘’（）【】《》、]/g, "");
-}
-
-function getTextOverlapRatio(textA, textB) {
-  if (!textA || !textB) {
-    return 0;
-  }
-
-  const longer = textA.length >= textB.length ? textA : textB;
-  const shorter = textA.length >= textB.length ? textB : textA;
-  let overlapCount = 0;
-  const remainingChars = longer.split("");
-
-  for (const char of shorter) {
-    const index = remainingChars.indexOf(char);
-
-    if (index >= 0) {
-      overlapCount += 1;
-      remainingChars.splice(index, 1);
-    }
-  }
-
-  return overlapCount / longer.length;
+  return isDuplicateStepEntry(nextStep, history);
 }
 
 function getStepText(step) {
@@ -2529,6 +2739,13 @@ function normalizeCurrentStep(value, options = {}) {
   const stage =
     normalizeStepStage(rawStep.stage || options.stage) ||
     inferStepStage(stepText, taskType);
+  const source = String(rawStep.source || options.source || "").trim();
+  const sourceReason = String(
+    rawStep.source_reason ||
+      rawStep.sourceReason ||
+      options.sourceReason ||
+      ""
+  ).trim();
 
   const normalizedStep = {
     step_type: stepType,
@@ -2548,9 +2765,19 @@ function normalizeCurrentStep(value, options = {}) {
     })
   };
 
+  if (source) {
+    normalizedStep.source = source;
+  }
+
+  if (sourceReason) {
+    normalizedStep.source_reason = sourceReason;
+  }
+
   if (stepType === "clarification") {
     normalizedStep.clarification_key = String(
-      rawStep.clarification_key || rawStep.clarificationKey || ""
+      rawStep.clarification_key ||
+        rawStep.clarificationKey ||
+        "clarification_answer"
     ).trim();
     normalizedStep.input_placeholder = String(
       rawStep.input_placeholder || rawStep.inputPlaceholder || ""
@@ -2561,7 +2788,41 @@ function normalizeCurrentStep(value, options = {}) {
     normalizedStep.simple_task_type = String(rawStep.simple_task_type || "").trim();
   }
 
+  [
+    "task_object",
+    "expected_output",
+    "progress_intent",
+    "progress_delta",
+    "why_not_duplicate"
+  ].forEach((field) => {
+    const fieldValue = String(rawStep[field] || "").trim();
+
+    if (fieldValue) {
+      normalizedStep[field] = fieldValue;
+    }
+  });
+
   return normalizedStep;
+}
+
+function normalizeHistoryStep(value, options = {}) {
+  const normalizedStep = normalizeCurrentStep(value, options);
+
+  if (!normalizedStep) {
+    return null;
+  }
+
+  return normalizedStep;
+}
+
+function normalizeStepHistory(stepHistory, options = {}) {
+  if (!Array.isArray(stepHistory)) {
+    return [];
+  }
+
+  return stepHistory
+    .map((step) => normalizeHistoryStep(step, options))
+    .filter(Boolean);
 }
 
 function normalizeActionType(value) {
@@ -2742,9 +3003,10 @@ function normalizeReEntryPoint(reEntryPoint, taskTitle, taskType) {
     taskTitle,
     taskType
   });
-  const stepHistory = Array.isArray(reEntryPoint.stepHistory)
-    ? reEntryPoint.stepHistory.map((step) => getStepText(step)).filter(Boolean)
-    : [];
+  const stepHistory = normalizeStepHistory(reEntryPoint.stepHistory, {
+    taskTitle,
+    taskType
+  });
 
   return {
     ...reEntryPoint,
@@ -3351,7 +3613,7 @@ function generateFallbackStepFromDiagnosis({
 
   return makeFallbackStep(
     {
-      step_text: `先写下你继续“${taskTitle || "这件事"}”最想获得的一个结果，以及最担心失去的一个成本。`,
+      step_text: `Write one result you still want from ${taskTitle || "this task"}, and one cost you want to avoid.`,
       action_type: "write",
       completion_criteria: "各写出一句即可，不需要现在做最终决定。",
       stage: "clarify",
@@ -3428,7 +3690,7 @@ function getDiagnosisFeedback(diagnosis) {
     value_uncertainty: "已暂停强推执行，先做最小价值确认。"
   };
 
-  return feedbackMap[diagnosis.root_cause] || "已生成更容易继续的 fallback step。";
+  return feedbackMap[diagnosis.root_cause] || "已生成更容易继续的备用步骤。";
 }
 
 function getFallbackStep(task) {
@@ -3571,6 +3833,35 @@ function getNonDuplicateFallbackStep(taskTitle, history = []) {
       taskTitle,
       taskType,
       stage: "clarify"
+    }
+  );
+}
+
+function getDuplicateFallbackStep(taskTitle, history = [], reason = "") {
+  const taskType = getTaskType(taskTitle);
+
+  return normalizeCurrentStep(
+    {
+      step_type: "action",
+      step_text:
+        "做一个防重复检查点：写下一个和已完成步骤不同的具体动作。",
+      action_type: "write",
+      completion_criteria:
+        "写出一个没有出现在已完成步骤里的具体下一步动作。",
+      estimated_effort: "low",
+      stage: "clarify",
+      risk_flags: ["unclear_output"],
+      task_object: "next_distinct_action",
+      expected_output: "1 distinct next action",
+      progress_intent: "confirm_next_distinct_action"
+    },
+    {
+      taskTitle,
+      taskType,
+      stage: "clarify",
+      source: STEP_SOURCE.DUPLICATE_FALLBACK,
+      sourceReason:
+        reason || "重复步骤重试后，已改用本地备用步骤。"
     }
   );
 }
@@ -3950,10 +4241,10 @@ function generateDecisionPrompt(taskType, step, task, resistanceText = "") {
   }
 
   if (stepText) {
-    return `先判断：你现在还想继续“${taskText}”吗？如果想，写下完成当前这一步后最想得到的结果。`;
+    return `Check whether you still want to continue "${taskText}". If yes, write the result you want after this step.`;
   }
 
-  return `先判断：你现在还想继续“${taskText}”吗？如果想，写下一个最想得到的结果。`;
+  return `Check whether you still want to continue "${taskText}". If yes, write one result you want.`;
 }
 
 function getResistanceResult(type, step) {
@@ -4074,7 +4365,7 @@ function createReEntryPoint(task, currentStep, stepHistory) {
 }
 
 function shouldCompleteTask(task, stepHistory, justCompletedStep = "") {
-  if (isFinalExecutionStep(justCompletedStep)) {
+  if (hasExplicitTaskCompletionSignal(justCompletedStep)) {
     return true;
   }
 
@@ -4085,7 +4376,9 @@ function shouldCompleteTask(task, stepHistory, justCompletedStep = "") {
   }
 
   const taskSubtype = getTaskSubtype(task, taskType);
-  const completedText = normalizeText(stepHistory.join(" "));
+  const completedText = normalizeText(
+    stepHistory.map((step) => getStepText(step)).join(" ")
+  );
 
   if (taskSubtype === TASK_SUBTYPES.REPLY_MESSAGE) {
     return hasAnyKeyword(completedText, [
@@ -4093,8 +4386,7 @@ function shouldCompleteTask(task, stepHistory, justCompletedStep = "") {
       "回复了",
       "发送回复",
       "发出回复",
-      "已联系",
-      "联系了"
+      "消息已发"
     ]);
   }
 
@@ -4103,6 +4395,7 @@ function shouldCompleteTask(task, stepHistory, justCompletedStep = "") {
       "已发送",
       "发送邮件",
       "点击发送",
+      "点击发出",
       "发出邮件",
       "邮件已发"
     ]);
@@ -4123,23 +4416,31 @@ function shouldCompleteTask(task, stepHistory, justCompletedStep = "") {
     "已发送",
     "已回复",
     "已提交",
-    "已联系",
+    "提交成功",
+    "已投递",
+    "投递成功",
+    "已发布",
+    "发布成功",
+    "已交付",
+    "交付完成",
+    "已付款",
+    "付款完成",
+    "已下单",
+    "下单完成",
+    "预约成功",
+    "报名成功",
     "办理完成"
   ]);
 }
 
-function isFinalExecutionStep(step) {
+function hasExplicitTaskCompletionSignal(step) {
   const stepText = getStepText(step);
   const text = normalizeText(
-    `${stepText} ${step?.completion_criteria || ""} ${step?.stage || ""}`
+    `${stepText} ${step?.completion_criteria || ""}`
   );
 
   if (!stepText) {
     return false;
-  }
-
-  if (step?.stage === "finish") {
-    return true;
   }
 
   const executionText = stripNegatedFinalActions(text);
@@ -4149,13 +4450,29 @@ function isFinalExecutionStep(step) {
     "最终",
     "完成任务",
     "任务完成",
-    "收尾",
+    "提交成功",
     "提交",
     "发送",
     "发出",
     "发布",
-    "已完成",
-    "结束"
+    "发布成功",
+    "结束",
+    "交付完成",
+    "已付款",
+    "付款完成",
+    "已完成付款",
+    "已下单",
+    "下单完成",
+    "预约成功",
+    "报名成功",
+    "办理完成",
+    "邮件已发",
+    "消息已发",
+    "申请已提交",
+    "简历已投递",
+    "订单已完成",
+    "报名已成功",
+    "预约已成功"
   ]);
 }
 

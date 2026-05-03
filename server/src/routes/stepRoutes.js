@@ -43,6 +43,43 @@ const PRESSURE_TYPES = [
   "value_uncertainty",
   "decision_cost"
 ];
+const CLARIFICATION_EXTERNAL_ACTION_KEYWORDS = [
+  "write down",
+  "draft",
+  "list out",
+  "prepare",
+  "complete",
+  "edit",
+  "fill",
+  "open",
+  "\u5199\u4e0b",
+  "\u5217\u51fa",
+  "\u6574\u7406",
+  "\u51c6\u5907",
+  "\u5b8c\u6210",
+  "\u4fee\u6539",
+  "\u586b\u5199",
+  "\u6253\u5f00"
+];
+const CLARIFICATION_QUESTION_CUES = [
+  "what",
+  "which",
+  "who",
+  "when",
+  "where",
+  "whether",
+  "do you",
+  "can you",
+  "is there",
+  "\u4ec0\u4e48",
+  "\u54ea",
+  "\u8c01",
+  "\u662f\u5426",
+  "\u6709\u6ca1\u6709",
+  "\u51e0",
+  "\u591a\u5c11",
+  "\u600e\u4e48"
+];
 
 router.post("/generate-first-step", async (req, res) => {
   try {
@@ -60,9 +97,7 @@ router.post("/generate-first-step", async (req, res) => {
       clarificationAnswer,
       stepHistory
     });
-    const aiText = await callDeepSeek(prompt);
-
-    res.json(normalizeAiStep(aiText));
+    res.json(await generateNormalizedStep(prompt));
   } catch (error) {
     console.error(error);
 
@@ -81,7 +116,10 @@ router.post("/generate-next-step", async (req, res) => {
       stepHistory,
       retryReason,
       rejectedStep,
-      previousStep
+      previousStep,
+      duplicateRetryCount,
+      rejectedSteps,
+      recentCompletedSteps
     } = req.body;
 
     if (!task || typeof task !== "string") {
@@ -103,11 +141,12 @@ router.post("/generate-next-step", async (req, res) => {
       stepHistory,
       retryReason,
       rejectedStep,
-      previousStep
+      previousStep,
+      duplicateRetryCount,
+      rejectedSteps,
+      recentCompletedSteps
     });
-    const aiText = await callDeepSeek(prompt);
-
-    res.json(normalizeAiStep(aiText));
+    res.json(await generateNormalizedStep(prompt));
   } catch (error) {
     console.error(error);
 
@@ -350,28 +389,36 @@ function normalizeAiStep(aiText) {
     };
   }
 
-  return {
-    step: text,
-    isTaskComplete: false,
-    sessionSummary: "Generated the current step from the task and history."
-  };
+  if (parsed) {
+    throw new Error("AI returned malformed step JSON.");
+  }
+
+  throw new Error("AI returned non-JSON step text.");
 }
 
 function normalizeStructuredStep(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  const stepValue = unwrapStructuredStepValue(value);
+
+  if (!stepValue || typeof stepValue !== "object" || Array.isArray(stepValue)) {
     return null;
   }
 
-  const type = value.step_type || value.type;
+  const type = stepValue.step_type || stepValue.type;
+  const isAction = type === "action";
   const isClarification = type === "clarification";
+
+  if (!isAction && !isClarification) {
+    return null;
+  }
+
   const stepText = isClarification
-    ? getReadableStepText(value.question) ||
-      getReadableStepText(value.step_text) ||
-      getReadableStepText(value.content)
-    : getReadableStepText(value.step_text) ||
-      getReadableStepText(value.content) ||
-      getReadableStepText(value.step) ||
-      getReadableStepText(value.action);
+    ? getReadableStepText(stepValue.question) ||
+      getReadableStepText(stepValue.step_text) ||
+      getReadableStepText(stepValue.content)
+    : getReadableStepText(stepValue.step_text) ||
+      getReadableStepText(stepValue.content) ||
+      getReadableStepText(stepValue.action) ||
+      getReadableStepText(stepValue.task_object);
 
   if (!stepText) {
     return null;
@@ -382,9 +429,9 @@ function normalizeStructuredStep(value) {
       step_type: "clarification",
       step_text: stepText,
       clarification_key: String(
-        value.clarification_key || value.reason || "clarification_answer"
+        stepValue.clarification_key || stepValue.reason || "clarification_answer"
       ).trim(),
-      input_placeholder: String(value.input_placeholder || value.placeholder || "").trim(),
+      input_placeholder: String(stepValue.input_placeholder || stepValue.placeholder || "").trim(),
       completion_criteria: "",
       action_type: "write",
       estimated_effort: "low",
@@ -396,16 +443,397 @@ function normalizeStructuredStep(value) {
   return {
     step_type: "action",
     step_text: stepText,
-    completion_criteria: String(value.completion_criteria || "").trim(),
-    action_type: ACTION_TYPES.includes(value.action_type)
-      ? value.action_type
-      : "write",
-    estimated_effort: ESTIMATED_EFFORTS.includes(value.estimated_effort)
-      ? value.estimated_effort
+    completion_criteria: String(stepValue.completion_criteria || "").trim(),
+    action_type: normalizeGeneratedActionType(stepValue.action_type),
+    estimated_effort: ESTIMATED_EFFORTS.includes(stepValue.estimated_effort)
+      ? stepValue.estimated_effort
       : "low",
-    stage: STEP_STAGES.includes(value.stage) ? value.stage : "start",
-    risk_flags: normalizeStringArray(value.risk_flags, 0, 4)
+    stage: normalizeGeneratedStage(stepValue.stage),
+    risk_flags: normalizeStringArray(stepValue.risk_flags, 0, 4),
+    ...getStructuredProgressFields(stepValue)
   };
+}
+
+async function generateNormalizedStep(prompt) {
+  const aiText = await callDeepSeek(prompt);
+
+  try {
+    const normalizedStep = normalizeAiStep(aiText);
+    return retryInvalidGeneratedStepIfNeeded(prompt, normalizedStep);
+  } catch (error) {
+    const retryPrompt = `${prompt}
+
+The previous output was rejected because it was not a valid Step object for this product.
+Return exactly one valid Step JSON object. Do not wrap it inside a "step" object. Do not return raw JSON as user-visible text. The user-visible action must be in "content" or "step_text". Use only allowed action_type and stage values.`;
+
+    try {
+      const retryText = await callDeepSeek(retryPrompt);
+      const retryStep = normalizeAiStep(retryText);
+      return getGeneratedStepIssue(retryStep?.step)
+        ? recoverInvalidGeneratedStep(retryStep)
+        : retryStep;
+    } catch {
+      return recoverInvalidGeneratedStep(null);
+    }
+  }
+}
+
+async function retryInvalidGeneratedStepIfNeeded(prompt, normalizedStep) {
+  const issue = getGeneratedStepIssue(normalizedStep?.step);
+
+  if (!issue) {
+    return normalizedStep;
+  }
+
+  const retryPrompt = `${prompt}
+
+The previous output was rejected because it violates this product's step boundary rules.
+Rejected step: ${getReadableStepText(normalizedStep.step)}
+Rejection reason: ${issue}
+
+Return exactly one valid Step JSON object.
+If you return a clarification Step, it must ask exactly one question for one missing fact.
+Do not include follow-up actions, conditional instructions, field bundles, or external writing/editing work in a clarification Step.
+If you return an action Step, it must not ask the user to reply to this system, answer this system, or provide information to this system.
+If the user should write, draft, list, prepare, edit, or complete something outside this system, return an action Step instead.`;
+
+  try {
+    const retryText = await callDeepSeek(retryPrompt);
+    const retryStep = normalizeAiStep(retryText);
+    const retryIssue = getGeneratedStepIssue(retryStep?.step);
+
+    if (!retryIssue) {
+      return retryStep;
+    }
+
+    return recoverInvalidGeneratedStep(retryStep, normalizedStep.step);
+  } catch {
+    return recoverInvalidGeneratedStep(normalizedStep);
+  }
+}
+
+function recoverInvalidGeneratedStep(normalizedStep, backupStep = null) {
+  const step = normalizedStep?.step;
+  const recoveryStep = step || backupStep;
+  const recoveryIssue = getGeneratedStepIssue(recoveryStep);
+  const fallbackQuestion =
+    extractSingleClarificationQuestion(step) ||
+    extractSingleClarificationQuestion(backupStep);
+
+  if (fallbackQuestion) {
+    return {
+      step: {
+        step_type: "clarification",
+        step_text: fallbackQuestion,
+        clarification_key: getClarificationKey(step || backupStep),
+        input_placeholder: getClarificationPlaceholder(step || backupStep),
+        completion_criteria: "",
+        action_type: "write",
+        estimated_effort: "low",
+        stage: "clarify",
+        risk_flags: ["unclear_output"]
+      },
+      isTaskComplete: false,
+      sessionSummary: "Generated a single-question clarification fallback."
+    };
+  }
+
+  return {
+    step: downgradeStepToSafeAction(recoveryStep, recoveryIssue),
+    isTaskComplete: false,
+    sessionSummary: "Downgraded an invalid generated step to a safe action step."
+  };
+}
+
+function getGeneratedStepIssue(step) {
+  return getClarificationStepIssue(step) || getActionStepIssue(step);
+}
+
+function getClarificationStepIssue(step) {
+  if (!step || typeof step !== "object" || step.step_type !== "clarification") {
+    return "";
+  }
+
+  const text = getReadableStepText(step);
+
+  if (!text) {
+    return "empty_clarification";
+  }
+
+  if ((text.match(/[?\uff1f]/g) || []).length > 1) {
+    return "multiple_questions";
+  }
+
+  if (/if\b.+\bplease\b/i.test(text) || /\u5982\u679c.+\u8bf7/.test(text)) {
+    return "conditional_action";
+  }
+
+  if (hasClarificationExternalAction(text)) {
+    return "external_action_in_clarification";
+  }
+
+  if (countListSeparators(text) >= 3) {
+    return "field_bundle";
+  }
+
+  return "";
+}
+
+function getActionStepIssue(step) {
+  if (!step || typeof step !== "object" || step.step_type !== "action") {
+    return "";
+  }
+
+  const text = `${getReadableStepText(step)} ${
+    step?.completion_criteria || ""
+  }`;
+
+  if (!text.trim()) {
+    return "empty_action";
+  }
+
+  if (hasSystemInformationCollectionRequest(text)) {
+    return "system_information_collection_in_action";
+  }
+
+  return "";
+}
+
+function extractSingleClarificationQuestion(step) {
+  const text = getReadableStepText(step);
+
+  if (!text) {
+    return "";
+  }
+
+  const sentences = text.match(/[^.!?\u3002\uff01\uff1f]+[.!?\u3002\uff01\uff1f]?/g) || [
+    text
+  ];
+  const questionSentence = sentences
+    .map((sentence) => sentence.trim())
+    .find((sentence) => isQuestionLike(sentence));
+
+  if (!questionSentence || getClarificationStepIssue({
+    step_type: "clarification",
+    step_text: questionSentence
+  })) {
+    return "";
+  }
+
+  return normalizeQuestionText(questionSentence);
+}
+
+function normalizeQuestionText(value) {
+  const text = String(value || "")
+    .trim()
+    .replace(/^\u8bf7(?:\u5148)?(?:\u786e\u8ba4|\u544a\u8bc9\u6211|\u56de\u7b54)[:\uff1a\s]*/, "")
+    .replace(/^please\s+(?:confirm|tell me|answer)\s*/i, "");
+
+  if (/[?\uff1f]$/.test(text)) {
+    return text;
+  }
+
+  if (/[\u4e00-\u9fff]/.test(text)) {
+    return text.replace(/[.\u3002!?\uff01\uff1f]*$/, "\uff1f");
+  }
+
+  return text.replace(/[.!?]*$/, "?");
+}
+
+function isQuestionLike(value) {
+  const text = String(value || "").trim();
+
+  return /[?\uff1f]/.test(text) || hasAnyText(text, CLARIFICATION_QUESTION_CUES);
+}
+
+function downgradeStepToSafeAction(step, issue = "") {
+  const safeStepText =
+    "\u56de\u5230\u5f53\u524d\u4efb\u52a1\uff0c\u5148\u5728\u5916\u90e8\u5de5\u5177\u4e2d\u5b9a\u4f4d\u4e0b\u4e00\u5904\u8981\u5904\u7406\u7684\u4f4d\u7f6e\u3002";
+  const stepText =
+    issue === "external_action_in_clarification"
+      ? getReadableStepText(step) || safeStepText
+      : safeStepText;
+  const rawStep = step && typeof step === "object" ? step : {};
+  const completionCriteria =
+    issue === "external_action_in_clarification"
+      ? String(rawStep.completion_criteria || "").trim()
+      : "";
+
+  return {
+    step_type: "action",
+    step_text: stepText,
+    completion_criteria:
+      completionCriteria ||
+      "Complete the action described in the current step.",
+    action_type: normalizeGeneratedActionType(rawStep.action_type || "write"),
+    estimated_effort: ESTIMATED_EFFORTS.includes(rawStep.estimated_effort)
+      ? rawStep.estimated_effort
+      : "low",
+    stage: normalizeGeneratedStage(rawStep.stage || "clarify"),
+    risk_flags: normalizeStringArray(rawStep.risk_flags, 0, 4),
+    ...getStructuredProgressFields(rawStep)
+  };
+}
+
+function hasSystemInformationCollectionRequest(text) {
+  const normalizedText = String(text || "").toLowerCase();
+
+  return (
+    /\b(?:reply|answer)\s+(?:with|to this system|here)\b/.test(
+      normalizedText
+    ) ||
+    /\b(?:tell me|provide me|send me|show me)\b/.test(normalizedText) ||
+    /\u8bf7(?:\u5148)?(?:\u56de\u590d|\u56de\u7b54|\u544a\u8bc9\u6211|\u63d0\u4f9b\u7ed9\u6211)/.test(
+      normalizedText
+    ) ||
+    /(?:\u56de\u590d|\u56de\u7b54)\u6211/.test(normalizedText)
+  );
+}
+
+function getClarificationKey(step) {
+  const rawStep = step && typeof step === "object" ? step : {};
+
+  return String(
+    rawStep.clarification_key || rawStep.reason || "clarification_answer"
+  ).trim();
+}
+
+function getClarificationPlaceholder(step) {
+  const rawStep = step && typeof step === "object" ? step : {};
+
+  return String(rawStep.input_placeholder || rawStep.placeholder || "").trim();
+}
+
+function hasAnyText(text, keywords) {
+  const normalizedText = String(text || "").toLowerCase();
+
+  return keywords.some((keyword) =>
+    normalizedText.includes(String(keyword).toLowerCase())
+  );
+}
+
+function hasClarificationExternalAction(text) {
+  const normalizedText = String(text || "").trim();
+  const englishActions = CLARIFICATION_EXTERNAL_ACTION_KEYWORDS
+    .filter((keyword) => /^[a-z ]+$/.test(keyword))
+    .map(escapeRegExp)
+    .join("|");
+  const chineseActions = CLARIFICATION_EXTERNAL_ACTION_KEYWORDS
+    .filter((keyword) => /[^\x00-\x7F]/.test(keyword))
+    .map(escapeRegExp)
+    .join("|");
+
+  return (
+    new RegExp(`^(?:${englishActions})\\b`, "i").test(normalizedText) ||
+    new RegExp(`\\b(?:please|you should|you need to)\\s+(?:${englishActions})\\b`, "i").test(normalizedText) ||
+    new RegExp(`^(?:${chineseActions})`).test(normalizedText) ||
+    new RegExp(`\\u8bf7(?:\\u5148)?(?:${chineseActions})`).test(normalizedText)
+  );
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function countListSeparators(text) {
+  return (String(text || "").match(/[,;\u3001\uff0c\uff1b]/g) || []).length;
+}
+
+function unwrapStructuredStepValue(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+
+  if (
+    value.step &&
+    typeof value.step === "object" &&
+    !Array.isArray(value.step)
+  ) {
+    return value.step;
+  }
+
+  return value;
+}
+
+function normalizeGeneratedActionType(value) {
+  if (ACTION_TYPES.includes(value)) {
+    return value;
+  }
+
+  const actionMap = {
+    create: "write",
+    draw: "write",
+    sketch: "write",
+    draft: "write",
+    design: "write",
+    fill: "write",
+    check: "review",
+    inspect: "review",
+    submit: "contact",
+    send: "contact"
+  };
+
+  return actionMap[String(value || "").trim().toLowerCase()] || "write";
+}
+
+function normalizeGeneratedStage(value) {
+  if (STEP_STAGES.includes(value)) {
+    return value;
+  }
+
+  const stageMap = {
+    concept: "execute",
+    concept_sketch: "execute",
+    sketch: "execute",
+    draft: "execute",
+    drafting: "execute",
+    ideation: "clarify",
+    planning: "clarify",
+    validation: "review",
+    check: "review",
+    submit: "finish",
+    delivery: "finish"
+  };
+
+  return stageMap[String(value || "").trim().toLowerCase()] || "execute";
+}
+
+function getStructuredProgressFields(value) {
+  return [
+    "task_object",
+    "expected_output",
+    "progress_intent",
+    "progress_delta",
+    "why_not_duplicate"
+  ].reduce((fields, fieldName) => {
+    const fieldValue = normalizeStructuredProgressField(
+      value[fieldName],
+      fieldName
+    );
+
+    if (fieldValue) {
+      fields[fieldName] = fieldValue;
+    }
+
+    return fields;
+  }, {});
+}
+
+function normalizeStructuredProgressField(value, fieldName) {
+  const fieldValue = String(value || "").trim();
+
+  if (!fieldValue) {
+    return "";
+  }
+
+  if (
+    (fieldName === "task_object" || fieldName === "progress_intent") &&
+    (fieldValue.length > 80 || /[，。！？；,.!?;]/.test(fieldValue))
+  ) {
+    return "";
+  }
+
+  return fieldValue;
 }
 
 function getReadableStepText(value) {
@@ -638,6 +1066,14 @@ function normalizeGeneratedFallbackStep(aiText, context, recoveryPlan) {
     };
   }
 
+  if (hasSystemInformationCollectionRequest(`${stepText} ${completionCriteria}`)) {
+    return {
+      fallbackStep: null,
+      fallbackStepError:
+        "AI fallback_step asked the user to provide information to this system."
+    };
+  }
+
   const actionType = ACTION_TYPES.includes(rawStep.action_type)
     ? rawStep.action_type
     : ACTION_TYPES.includes(requirements.action_type)
@@ -658,6 +1094,7 @@ function normalizeGeneratedFallbackStep(aiText, context, recoveryPlan) {
 
   return {
     fallbackStep: {
+      step_type: "action",
       step_text: stepText,
       completion_criteria: completionCriteria,
       action_type: actionType,
