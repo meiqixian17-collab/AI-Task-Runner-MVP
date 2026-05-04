@@ -24,6 +24,13 @@ import {
   getDuplicateStepDecision
 } from "./duplicateRetry.mjs";
 import { isDuplicateStepEntry } from "./stepDuplicate.mjs";
+import {
+  COMPLETION_CONFIRMATION_TYPES,
+  createNormalTaskCompletionCheckpointStep,
+  shouldAskNormalTaskCompletionCheckpoint,
+  shouldAskNormalTaskDuplicateCheckpoint,
+  shouldContinueCompletionConfirmationWithAi
+} from "./taskCompletionCheckpoint.mjs";
 import StepCard from "./StepCard.jsx";
 
 const APP_STATUS = {
@@ -1045,7 +1052,8 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
       resistanceFeedback: "",
       interruptedStep: "",
       resistanceDiagnosis: null,
-      resistanceResolution: null
+      resistanceResolution: null,
+      completionCheckpointDismissedAtStepCount: null
     });
     clearSavedReEntryPoint();
 
@@ -1077,7 +1085,8 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
       resistanceFeedback: "",
       interruptedStep: "",
       resistanceDiagnosis: null,
-      resistanceResolution: null
+      resistanceResolution: null,
+      completionCheckpointDismissedAtStepCount: null
     });
   }
 
@@ -1130,7 +1139,8 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
       resistanceFeedback: "",
       interruptedStep: "",
       resistanceDiagnosis: null,
-      resistanceResolution: null
+      resistanceResolution: null,
+      completionCheckpointDismissedAtStepCount: null
     });
     clearSavedReEntryPoint();
 
@@ -1149,6 +1159,18 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
       })
     ) {
       showSimpleTaskCompletionConfirmation(taskInput);
+      return;
+    }
+
+    if (
+      shouldAskNormalTaskCompletionCheckpoint({
+        taskTitle: taskInput,
+        stepHistory: nextHistory,
+        completionCheckpointDismissedAtStepCount:
+          task.completionCheckpointDismissedAtStepCount
+      })
+    ) {
+      showNormalTaskCompletionCheckpoint(taskInput, nextHistory);
       return;
     }
 
@@ -1304,7 +1326,7 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
       !data.isTaskComplete &&
       isAnsweredClarificationStep(nextStep, effectiveTaskContext)
     ) {
-      const immediateActionStep = maybeGenerateImmediateActionStep({
+      const immediateActionStep = maybeGenerateActionFromAnsweredClarification({
         title: taskTitle,
         taskContext: effectiveTaskContext
       });
@@ -1350,6 +1372,26 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
 
       if (duplicateDecision.action === "complete") {
         showSimpleTaskCompletionConfirmation(taskTitle);
+        return;
+      }
+
+      if (
+        duplicateDecision.action !== "accept" &&
+        shouldAskNormalTaskDuplicateCheckpoint({
+          taskTitle,
+          stepHistory: historyForCompare,
+          completionCheckpointDismissedAtStepCount:
+            options.completionCheckpointDismissedAtStepCount ??
+            task.completionCheckpointDismissedAtStepCount
+        })
+      ) {
+        showNormalTaskCompletionCheckpoint(taskTitle, historyForCompare, {
+          duplicateRetry: buildPendingDuplicateRetryContext({
+            rejectedStep: nextStep,
+            historyForCompare,
+            duplicateDecision
+          })
+        });
         return;
       }
 
@@ -1471,6 +1513,38 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
     clearSavedReEntryPoint();
   }
 
+  function showNormalTaskCompletionCheckpoint(
+    taskTitle,
+    historyForCompare = stepHistory,
+    options = {}
+  ) {
+    updateCurrentTask({
+      currentStep: normalizeCurrentStep(
+        createNormalTaskCompletionCheckpointStep(taskTitle, {
+          pending_duplicate_retry: options.duplicateRetry || null
+        }),
+        {
+          taskTitle,
+          stage: "finish",
+          source: STEP_SOURCE.LOCAL_RULE,
+          sourceReason: "Normal task reached a completion checkpoint."
+        }
+      ),
+      status: APP_STATUS.READY,
+      sessionSummary: "",
+      errorMessage: "",
+      generationSource: GENERATION_SOURCE.NONE,
+      reEntryPoint: null,
+      resistancePanelOpen: false,
+      selectedResistanceType: "",
+      resistanceFeedback: "",
+      interruptedStep: "",
+      resistanceDiagnosis: null,
+      resistanceResolution: null
+    });
+    clearSavedReEntryPoint();
+  }
+
   function handleConfirmSimpleTaskComplete() {
     updateCurrentTask({
       currentStep: "",
@@ -1489,7 +1563,12 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
     clearSavedReEntryPoint();
   }
 
-  function handleRequestSimpleTaskFinalStep() {
+  async function handleRequestCompletionContinuation() {
+    if (shouldContinueCompletionConfirmationWithAi(currentStep)) {
+      await handleContinueAfterNormalTaskCheckpoint();
+      return;
+    }
+
     updateCurrentTask({
       currentStep: normalizeCurrentStep(createSimpleFinishingStep(taskInput), {
         taskTitle: taskInput,
@@ -1510,6 +1589,82 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
       resistanceResolution: null
     });
     clearSavedReEntryPoint();
+  }
+
+  async function handleContinueAfterNormalTaskCheckpoint() {
+    const pendingDuplicateRetry =
+      currentStep &&
+      typeof currentStep === "object" &&
+      currentStep.pending_duplicate_retry &&
+      typeof currentStep.pending_duplicate_retry === "object"
+        ? currentStep.pending_duplicate_retry
+        : null;
+
+    updateCurrentTask({
+      currentStep: "",
+      status: APP_STATUS.LOADING,
+      sessionSummary: "",
+      errorMessage: "",
+      generationSource: GENERATION_SOURCE.NONE,
+      reEntryPoint: null,
+      resistancePanelOpen: false,
+      selectedResistanceType: "",
+      resistanceFeedback: "",
+      interruptedStep: "",
+      resistanceDiagnosis: null,
+      resistanceResolution: null,
+      completionCheckpointDismissedAtStepCount: stepHistory.length
+    });
+    clearSavedReEntryPoint();
+
+    try {
+      const data = pendingDuplicateRetry
+        ? await regenerateAfterDuplicateStep({
+            taskTitle: taskInput,
+            rejectedStep: pendingDuplicateRetry.rejectedStep,
+            historyForCompare: stepHistory,
+            taskContext: task.taskContext,
+            duplicateRetryCount: pendingDuplicateRetry.duplicateRetryCount,
+            rejectedSteps: pendingDuplicateRetry.rejectedSteps
+          })
+        : await generateNextStep(
+            buildTaskGenerationPayload({
+              taskTitle: taskInput,
+              taskContext: task.taskContext,
+              stepHistory
+            }),
+            stepHistory
+          );
+
+      await applyGeneratedStep(data, taskInput, stepHistory, {
+        duplicateRetryCount: pendingDuplicateRetry?.duplicateRetryCount,
+        rejectedSteps: pendingDuplicateRetry?.rejectedSteps,
+        stepSource: pendingDuplicateRetry
+          ? STEP_SOURCE.DUPLICATE_RETRY
+          : STEP_SOURCE.AI,
+        sourceReason: pendingDuplicateRetry
+          ? "Regenerated after normal-task duplicate checkpoint."
+          : "Generated after normal-task completion checkpoint.",
+        completionCheckpointDismissedAtStepCount: stepHistory.length
+      });
+    } catch (error) {
+      applyFallbackStep(taskInput, error, stepHistory);
+    }
+  }
+
+  function buildPendingDuplicateRetryContext({
+    rejectedStep,
+    historyForCompare,
+    duplicateDecision
+  }) {
+    return {
+      rejectedStep: getStepText(rejectedStep),
+      duplicateRetryCount:
+        duplicateDecision.nextDuplicateRetryCount ||
+        duplicateDecision.duplicateRetryCount + 1,
+      rejectedSteps: duplicateDecision.rejectedSteps || [],
+      previousStep: getStepText(historyForCompare[historyForCompare.length - 1])
+    };
   }
 
   function regenerateAfterDuplicateStep({
@@ -1560,6 +1715,10 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
   }
 
   function applyFallbackStep(taskTitle, error, historyForCompare = stepHistory) {
+    const fallbackErrorMessage = error?.message
+      ? `已启用备用步骤：${error.message}`
+      : "已启用备用步骤：AI 生成失败或超时。";
+
     updateCurrentTask({
       currentStep: withStepSource(
         getNonDuplicateFallbackStep(taskTitle, historyForCompare),
@@ -1571,7 +1730,7 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
       status: APP_STATUS.READY,
       generationSource: GENERATION_SOURCE.FALLBACK,
       sessionSummary: "AI 生成失败或超时，系统已启用备用步骤。",
-      errorMessage: "已启用备用步骤：AI 生成失败或超时。",
+      errorMessage: fallbackErrorMessage,
       reEntryPoint: null,
       resistancePanelOpen: false,
       selectedResistanceType: "",
@@ -1934,7 +2093,7 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
             onResumeCurrentStep={handleResumeCurrentStep}
             onCompleteCurrentStep={handleCompleteCurrentStep}
             onConfirmSimpleTaskComplete={handleConfirmSimpleTaskComplete}
-            onRequestSimpleTaskFinalStep={handleRequestSimpleTaskFinalStep}
+            onRequestSimpleTaskFinalStep={handleRequestCompletionContinuation}
             onSubmitClarificationAnswer={handleSubmitClarificationAnswer}
             onToggleResistancePanel={toggleResistancePanel}
             onResistanceSelect={handleResistanceSelect}
@@ -2006,6 +2165,7 @@ function createTask(overrides = {}) {
     interruptedStep: "",
     resistanceDiagnosis: null,
     resistanceResolution: null,
+    completionCheckpointDismissedAtStepCount: null,
     ...overrides
   });
 }
@@ -2121,7 +2281,12 @@ function normalizeTask(task) {
     ),
     resistanceResolution: normalizePipelineResistanceResolution(
       task.resistanceResolution
+    ),
+    completionCheckpointDismissedAtStepCount: Number.isFinite(
+      Number(task.completionCheckpointDismissedAtStepCount)
     )
+      ? Math.max(0, Math.floor(Number(task.completionCheckpointDismissedAtStepCount)))
+      : null
   };
 }
 
@@ -2149,6 +2314,16 @@ function normalizeTaskContext(value) {
   );
 }
 
+function getTaskContextText(taskTitle, taskContext = {}) {
+  return [
+    taskTitle,
+    ...Object.values(taskContext || {})
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
 function isAnsweredClarificationStep(step, taskContext) {
   if (!step || typeof step !== "object" || step.step_type !== "clarification") {
     return false;
@@ -2158,6 +2333,13 @@ function isAnsweredClarificationStep(step, taskContext) {
   const clarificationKey = String(step.clarification_key || "").trim();
 
   return Boolean(clarificationKey && context[clarificationKey]);
+}
+
+function maybeGenerateActionFromAnsweredClarification({ title, taskContext }) {
+  return maybeGenerateImmediateActionStep({
+    title,
+    taskContext
+  });
 }
 
 function maybeGenerateClarificationStep(task) {
@@ -2202,6 +2384,7 @@ function maybeGenerateImmediateActionStep(task) {
   const taskTitle = String(task.title || "").trim();
   const text = normalizeText(taskTitle);
   const taskContext = normalizeTaskContext(task.taskContext);
+  const contextText = normalizeText(getTaskContextText(taskTitle, taskContext));
 
   if (
     hasAnyKeyword(text, ["logo", "Logo", "标志"]) &&
@@ -2228,9 +2411,31 @@ function maybeGenerateImmediateActionStep(task) {
     );
   }
 
+  const hasPortfolioContext = hasAnyKeyword(contextText, ["作品集", "portfolio"]);
+  const hasExplicitSinglePortfolioProject = hasAnyKeyword(contextText, [
+    "一个项目",
+    "1个项目",
+    "一个案例",
+    "1个案例",
+    "只有一个"
+  ]);
+
   if (
-    hasAnyKeyword(text, ["作品集", "portfolio"]) &&
-    hasAnyKeyword(taskContext.current_stage || "", ["两个项目", "2个项目", "已有项目", "还没有整理", "案例"])
+    hasPortfolioContext &&
+    !hasExplicitSinglePortfolioProject &&
+    hasAnyKeyword(contextText, [
+      "两个项目",
+      "2个项目",
+      "两个案例",
+      "2个案例",
+      "已有项目",
+      "已有案例",
+      "还没有整理",
+      "还没开始整理",
+      "还没整理",
+      "未整理",
+      "案例"
+    ])
   ) {
     return normalizeCurrentStep(
       {
@@ -2242,6 +2447,43 @@ function maybeGenerateImmediateActionStep(task) {
         estimated_effort: "low",
         stage: "start",
         risk_flags: ["unclear_output", "perfectionism"]
+      },
+      {
+        taskTitle,
+        stage: "start",
+        source: STEP_SOURCE.LOCAL_RULE,
+        sourceReason: "Generated by a local immediate-action rule."
+      }
+    );
+  }
+
+  if (
+    hasPortfolioContext &&
+    hasAnyKeyword(contextText, [
+      "一个项目",
+      "1个项目",
+      "一个案例",
+      "1个案例",
+      "只有一个",
+      "还没开始",
+      "没有开始",
+      "刚开始"
+    ])
+  ) {
+    return normalizeCurrentStep(
+      {
+        step_type: "action",
+        step_text:
+          "新建一个作品集草稿文档，写下这个唯一项目的临时名称，并补一句“这个项目最想证明我的哪种能力”。",
+        action_type: "write",
+        completion_criteria:
+          "写出项目临时名称和 1 句能力判断即可，不需要开始排版。",
+        estimated_effort: "low",
+        stage: "start",
+        risk_flags: ["unclear_output", "perfectionism"],
+        task_object: "portfolio_single_project_entry",
+        expected_output: "project name and 1 ability sentence",
+        progress_intent: "define_single_portfolio_project_entry"
       },
       {
         taskTitle,
@@ -2786,6 +3028,33 @@ function normalizeCurrentStep(value, options = {}) {
 
   if (stepType === "completion_confirmation") {
     normalizedStep.simple_task_type = String(rawStep.simple_task_type || "").trim();
+    normalizedStep.completion_confirmation_type =
+      String(rawStep.completion_confirmation_type || "").trim() ||
+      COMPLETION_CONFIRMATION_TYPES.SIMPLE_TASK;
+
+    if (
+      rawStep.pending_duplicate_retry &&
+      typeof rawStep.pending_duplicate_retry === "object" &&
+      !Array.isArray(rawStep.pending_duplicate_retry)
+    ) {
+      normalizedStep.pending_duplicate_retry = {
+        rejectedStep: getStepText(rawStep.pending_duplicate_retry.rejectedStep),
+        duplicateRetryCount: Number.isFinite(
+          Number(rawStep.pending_duplicate_retry.duplicateRetryCount)
+        )
+          ? Math.max(
+              0,
+              Math.floor(Number(rawStep.pending_duplicate_retry.duplicateRetryCount))
+            )
+          : 1,
+        rejectedSteps: Array.isArray(rawStep.pending_duplicate_retry.rejectedSteps)
+          ? rawStep.pending_duplicate_retry.rejectedSteps
+              .map((step) => getStepText(step))
+              .filter(Boolean)
+          : [],
+        previousStep: getStepText(rawStep.pending_duplicate_retry.previousStep)
+      };
+    }
   }
 
   [

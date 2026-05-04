@@ -1,6 +1,17 @@
-import { generateNextStepPrompt } from "../src/services/promptService.js";
+import {
+  generateFirstStepPrompt,
+  generateNextStepPrompt
+} from "../src/services/promptService.js";
 
 const failures = [];
+
+const firstStepPrompt = generateFirstStepPrompt({
+  task: "做作品集",
+  taskContext: {
+    current_stage: "有两个项目，还没开始整理"
+  },
+  clarificationAnswer: "有两个项目，还没开始整理"
+});
 
 const prompt = generateNextStepPrompt({
   task: "Draft report",
@@ -17,6 +28,26 @@ const prompt = generateNextStepPrompt({
   rejectedSteps: ["Write the title again", "Rewrite the title"]
 });
 
+assertIncludes(
+  "first prompt treats clarification answer as provided context",
+  firstStepPrompt,
+  "Treat Latest clarification answer and Task context JSON as already provided context"
+);
+assertIncludes(
+  "first prompt forbids repeated clarification",
+  firstStepPrompt,
+  "Do not ask a clarification question that repeats an already answered clarification"
+);
+assertIncludes(
+  "next prompt treats clarification answer as provided context",
+  prompt,
+  "Treat Latest clarification answer and Task context JSON as already provided context"
+);
+assertIncludes(
+  "next prompt forbids repeated clarification",
+  prompt,
+  "Do not ask a clarification question that repeats an already answered clarification"
+);
 assertIncludes("prompt includes retry count", prompt, "Duplicate retry attempt: 2");
 assertIncludes("prompt includes rejectedSteps heading", prompt, "Rejected steps from this retry round to avoid");
 assertIncludes("prompt includes first rejected step", prompt, "Write the title again");

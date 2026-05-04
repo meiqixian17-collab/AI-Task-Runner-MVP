@@ -27,18 +27,21 @@ Rules:
 5. A clarification Step asks exactly one most important question.
 6. Use clarification when the goal is too broad, the task object is missing, current state is missing, constraints are missing, or the task is an unscoped life/decision question.
 7. If enough information exists, return an action Step.
-8. Action content must be concrete and observable. Do not output vague actions like "先明确你的目标", "先整理你的想法", "先规划一下", "先查找相关资料", "先思考你想要什么", "先制定一个计划", or "先了解一下相关内容".
-9. If the task is already complete, start with [TASK_DONE] and briefly say it is complete.
-10. Respond in the same language as the user's task.
-11. Clarification questions must collect text only.
-12. A clarification Step must ask exactly one question for one missing fact. Do not ask multiple questions or request a bundle of fields.
-13. A clarification Step must not ask the user to write, draft, list, prepare, complete, or edit external task output. If the user should do work in a document, app, website, or real-world context, return an action Step instead.
-14. If several facts are missing, ask only the first blocking question.
-15. An action Step must not ask the user to reply to this system, answer this system, tell you information, or provide information to this system. If the system needs information from the user, return a clarification Step.
-16. Action Steps must include action_type, stage, task_object, expected_output, progress_intent, and completion_criteria. These fields are for progress tracking and should be specific, stable, and short.
-17. action_type must be exactly one of: open, write, select, prepare, contact, move, review, decide. Do not invent values such as sketch, create, or design.
-18. stage must be exactly one of: start, clarify, execute, review, finish. Do not invent values such as concept_sketch.
-19. task_object and progress_intent must be short stable labels, not full user-facing sentences. Put the user-visible action only in content.
+8. Treat Latest clarification answer and Task context JSON as already provided context.
+9. If the task text, taskContext, or latest clarification answer already contains the missing information, do not ask for it again.
+10. Do not ask a clarification question that repeats an already answered clarification. Generate an action Step instead.
+11. Action content must be concrete and observable. Do not output vague actions like "先明确你的目标", "先整理你的想法", "先规划一下", "先查找相关资料", "先思考你想要什么", "先制定一个计划", or "先了解一下相关内容".
+12. If the task is already complete, start with [TASK_DONE] and briefly say it is complete.
+13. Respond in the same language as the user's task.
+14. Clarification questions must collect text only.
+15. A clarification Step must ask exactly one question for one missing fact. Do not ask multiple questions or request a bundle of fields.
+16. A clarification Step must not ask the user to write, draft, list, prepare, complete, or edit external task output. If the user should do work in a document, app, website, or real-world context, return an action Step instead.
+17. If several facts are missing, ask only the first blocking question.
+18. An action Step must not ask the user to reply to this system, answer this system, tell you information, or provide information to this system. If the system needs information from the user, return a clarification Step.
+19. Action Steps must include action_type, stage, task_object, expected_output, progress_intent, and completion_criteria. These fields are for progress tracking and should be specific, stable, and short.
+20. action_type must be exactly one of: open, write, select, prepare, contact, move, review, decide. Do not invent values such as sketch, create, or design.
+21. stage must be exactly one of: start, clarify, execute, review, finish. Do not invent values such as concept_sketch.
+22. task_object and progress_intent must be short stable labels, not full user-facing sentences. Put the user-visible action only in content.
 
 ${formatNonTextMaterialBoundary()}
 
@@ -98,20 +101,23 @@ Rules:
 6. The progress delta should usually move one stage forward, for example: from opening/finding something to selecting the target item; from selecting something to writing/filling one concrete part; from writing/filling to checking one specific detail; from checking to sending/submitting/finishing; from planning to doing one visible action.
 7. Prefer a safe, low-barrier, text-executable next action. Return a clarification Step only when missing information would make the next action unsafe, non-specific, or dependent on key information the user has not provided.
 8. If enough information exists, return an action Step.
-9. Action content must be concrete and observable. Do not output vague actions like "先明确你的目标", "先整理你的想法", "先规划一下", "先查找相关资料", "先思考你想要什么", "先制定一个计划", or "先了解一下相关内容".
-10. Do not explain theory or provide a long plan.
-11. If the completed steps already close the task or there is no meaningful next action, start with [TASK_DONE] and briefly say it is complete.
-12. Respond in the same language as the user's task.
-13. When duplicate retry context is present, continue from the previous completed step. The new action must feel like the next natural task-progress step, not a generic fallback or restart.
-14. Clarification questions must collect text only.
-15. A clarification Step must ask exactly one question for one missing fact. Do not ask multiple questions or request a bundle of fields.
-16. A clarification Step must not ask the user to write, draft, list, prepare, complete, or edit external task output. If the user should do work in a document, app, website, or real-world context, return an action Step instead.
-17. If several facts are missing, ask only the first blocking question.
-18. An action Step must not ask the user to reply to this system, answer this system, tell you information, or provide information to this system. If the system needs information from the user, return a clarification Step.
-19. Action Steps must include action_type, stage, task_object, expected_output, progress_intent, and completion_criteria. These fields are for progress tracking and should be specific, stable, and short.
-20. action_type must be exactly one of: open, write, select, prepare, contact, move, review, decide. Do not invent values such as sketch, create, or design.
-21. stage must be exactly one of: start, clarify, execute, review, finish. Do not invent values such as concept_sketch.
-22. task_object and progress_intent must be short stable labels, not full user-facing sentences. Put the user-visible action only in content.
+9. Treat Latest clarification answer and Task context JSON as already provided context.
+10. If the task text, taskContext, or latest clarification answer already contains the missing information, do not ask for it again.
+11. Do not ask a clarification question that repeats an already answered clarification. Generate an action Step instead.
+12. Action content must be concrete and observable. Do not output vague actions like "先明确你的目标", "先整理你的想法", "先规划一下", "先查找相关资料", "先思考你想要什么", "先制定一个计划", or "先了解一下相关内容".
+13. Do not explain theory or provide a long plan.
+14. If the completed steps already close the task or there is no meaningful next action, start with [TASK_DONE] and briefly say it is complete.
+15. Respond in the same language as the user's task.
+16. When duplicate retry context is present, continue from the previous completed step. The new action must feel like the next natural task-progress step, not a generic fallback or restart.
+17. Clarification questions must collect text only.
+18. A clarification Step must ask exactly one question for one missing fact. Do not ask multiple questions or request a bundle of fields.
+19. A clarification Step must not ask the user to write, draft, list, prepare, complete, or edit external task output. If the user should do work in a document, app, website, or real-world context, return an action Step instead.
+20. If several facts are missing, ask only the first blocking question.
+21. An action Step must not ask the user to reply to this system, answer this system, tell you information, or provide information to this system. If the system needs information from the user, return a clarification Step.
+22. Action Steps must include action_type, stage, task_object, expected_output, progress_intent, and completion_criteria. These fields are for progress tracking and should be specific, stable, and short.
+23. action_type must be exactly one of: open, write, select, prepare, contact, move, review, decide. Do not invent values such as sketch, create, or design.
+24. stage must be exactly one of: start, clarify, execute, review, finish. Do not invent values such as concept_sketch.
+25. task_object and progress_intent must be short stable labels, not full user-facing sentences. Put the user-visible action only in content.
 
 ${formatNonTextMaterialBoundary()}
 

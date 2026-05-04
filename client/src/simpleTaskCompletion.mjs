@@ -3,29 +3,39 @@ const SIMPLE_TASK_TYPES = {
   PICKUP: "pickup",
   DAILY_ACTION: "daily_action",
   OPEN: "open",
-  SEND: "send"
+  SEND: "send",
+  MOVE: "move",
+  CHECK: "check"
 };
 
 const SIMPLE_TASK_RULES = [
   {
     type: SIMPLE_TASK_TYPES.PURCHASE,
-    keywords: ["买咖啡", "买奶茶", "买水", "买早餐", "买饭", "点外卖"]
+    keywords: ["买咖啡", "买奶茶", "买水", "买早餐", "买饭", "点外卖", "下单"]
   },
   {
     type: SIMPLE_TASK_TYPES.PICKUP,
-    keywords: ["拿快递", "取快递", "拿外卖", "取餐"]
+    keywords: ["拿快递", "取快递", "拿外卖", "取餐", "拿东西", "取文件"]
   },
   {
     type: SIMPLE_TASK_TYPES.DAILY_ACTION,
-    keywords: ["倒垃圾", "洗澡", "刷牙", "洗脸", "喝水", "吃药"]
+    keywords: ["倒垃圾", "洗澡", "刷牙", "洗脸", "喝水", "吃药", "关灯", "充电"]
   },
   {
     type: SIMPLE_TASK_TYPES.OPEN,
-    keywords: ["打开微信", "打开邮箱", "打开文档", "打开课程"]
+    keywords: ["打开微信", "打开邮箱", "打开文档", "打开课程", "打开网页", "进入页面"]
   },
   {
     type: SIMPLE_TASK_TYPES.SEND,
-    keywords: ["发消息", "回消息", "发邮件"]
+    keywords: ["发消息", "回消息", "发邮件", "回复邮件", "联系"]
+  },
+  {
+    type: SIMPLE_TASK_TYPES.MOVE,
+    keywords: ["出门", "下楼", "去超市", "去教室", "去健身", "走到"]
+  },
+  {
+    type: SIMPLE_TASK_TYPES.CHECK,
+    keywords: ["确认时间", "查看通知", "检查邮件", "看一眼日程", "确认地址"]
   }
 ];
 
@@ -78,6 +88,18 @@ const FINISHING_STEPS = {
     action_type: "contact",
     completion_criteria: "确认收件人后，发送或保存草稿即可。",
     stage: "finish"
+  },
+  [SIMPLE_TASK_TYPES.MOVE]: {
+    step_text: "只补最后一步：走到目标位置，或完成出发前的最后一个动作。",
+    action_type: "move",
+    completion_criteria: "到达目标位置，或完成出发前最后一个动作即可。",
+    stage: "finish"
+  },
+  [SIMPLE_TASK_TYPES.CHECK]: {
+    step_text: "只补最后一步：打开目标信息源，确认那一个关键信息。",
+    action_type: "review",
+    completion_criteria: "确认到目标信息即可，不需要继续整理。",
+    stage: "finish"
   }
 };
 
@@ -112,6 +134,7 @@ export function shouldAskSimpleTaskCompletion({
 export function createSimpleCompletionStep(taskTitle) {
   return {
     step_type: "completion_confirmation",
+    completion_confirmation_type: "simple_task",
     step_text: "这件事本身很短，我先不继续拆了。确认一下：现在是否已经完成？",
     action_type: "decide",
     completion_criteria: "选择已经完成或还差一步即可。",

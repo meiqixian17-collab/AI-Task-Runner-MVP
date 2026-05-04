@@ -11,7 +11,9 @@
     "test:duplicate": "node scripts/test-step-duplicate.mjs",
     "test:duplicate-retry": "node scripts/test-duplicate-retry.mjs",
     "test:completion": "node scripts/test-task-completion-rules.mjs",
-    "test:simple": "node scripts/test-simple-task-completion.mjs"
+    "test:completion-checkpoint": "node scripts/test-task-completion-checkpoint.mjs",
+    "test:simple": "node scripts/test-simple-task-completion.mjs",
+    "test:immediate": "node scripts/test-immediate-action-rules.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.1",

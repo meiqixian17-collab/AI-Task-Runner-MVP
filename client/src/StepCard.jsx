@@ -28,7 +28,7 @@ const STATUS_COPY = {
   loading: {
     label: "生成步骤",
     title: "正在找到最小可执行动作",
-    body: "优先保证这一步具体、轻量、不会让你卡在准备阶段。"
+    body: "优先保证这一步具体、轻量，不会让你卡在准备阶段。"
   },
   ready: {
     label: "准备执行",
@@ -56,7 +56,6 @@ const STATUS_COPY = {
     body: "上下文已停在这里，重新开始会清空当前任务。"
   }
 };
-
 function StepCard({
   appStatus,
   currentStep,
@@ -121,32 +120,50 @@ function StepCard({
   const canSubmitClarification = clarificationAnswer.trim().length > 0;
 
   useEffect(() => {
-    const textarea = clarificationTextareaRef.current;
-
-    if (!textarea) {
-      return;
-    }
-
-    textarea.style.height = "44px";
-
-    const isMultiline = textarea.scrollHeight > 44;
-    setClarificationIsMultiline((currentValue) =>
-      currentValue === isMultiline ? currentValue : isMultiline
-    );
-    textarea.style.height = isMultiline ? "80px" : "44px";
-    textarea.style.overflowY = textarea.scrollHeight > 80 ? "auto" : "hidden";
-  }, [clarificationAnswer]);
-
-  useEffect(() => {
     setClarificationAnswer("");
     setClarificationError("");
-    setClarificationIsMultiline(false);
   }, [
     currentStepText,
     currentStep && typeof currentStep === "object"
       ? currentStep.clarification_key
       : ""
   ]);
+
+  useEffect(() => {
+    const textarea = clarificationTextareaRef.current;
+
+    if (!textarea) {
+      return;
+    }
+
+    const minimumHeight = 44;
+    const maximumHeight = 96;
+    const originalValue = textarea.value;
+    const shouldMeasurePlaceholder = !originalValue && inputPlaceholder;
+
+    if (shouldMeasurePlaceholder) {
+      textarea.value = inputPlaceholder;
+    }
+
+    textarea.style.height = `${minimumHeight}px`;
+
+    const measuredHeight = textarea.scrollHeight;
+    const nextHeight = Math.min(
+      Math.max(measuredHeight, minimumHeight),
+      maximumHeight
+    );
+    const isMultiline = measuredHeight > minimumHeight;
+
+    if (shouldMeasurePlaceholder) {
+      textarea.value = originalValue;
+    }
+
+    setClarificationIsMultiline((currentValue) =>
+      currentValue === isMultiline ? currentValue : isMultiline
+    );
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY = measuredHeight > maximumHeight ? "auto" : "hidden";
+  }, [clarificationAnswer, inputPlaceholder, currentStepText]);
 
   function handleResistanceTextSubmit(event) {
     event.preventDefault();
@@ -243,7 +260,7 @@ function StepCard({
             )}
             {isUsingFallback && (
               <strong className="source-badge source-badge--fallback">
-                Fallback
+                备用步骤
               </strong>
             )}
           </div>

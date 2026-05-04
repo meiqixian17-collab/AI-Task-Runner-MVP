@@ -2567,6 +2567,7 @@ function normalizeCurrentStep(value, options = {}) {
     inferStepStage(stepText, taskType);
 
   return {
+    step_type: "action",
     step_text: stepText,
     action_type: actionType,
     completion_criteria:
