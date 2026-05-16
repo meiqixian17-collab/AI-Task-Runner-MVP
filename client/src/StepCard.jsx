@@ -1,4 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  CircleAlert,
+  Play,
+  RefreshCw,
+  SendHorizontal,
+  TriangleAlert
+} from "lucide-react";
 
 const RESISTANCE_OPTIONS = [
   {
@@ -41,7 +50,7 @@ const STATUS_COPY = {
     body: "如果卡住，可以把动作继续缩小，或暂时保留入口。"
   },
   paused: {
-    label: "已暂停",
+    label: "入口已保留",
     title: "入口已为你保留",
     body: "下次回来时，不需要重新整理上下文。"
   },
@@ -70,7 +79,6 @@ function StepCard({
   resistanceLoadingMessage,
   sessionSummary,
   errorMessage,
-  statusMeta,
   onStartExecuting,
   onResumeCurrentStep,
   onCompleteCurrentStep,
@@ -88,7 +96,9 @@ function StepCard({
   const [clarificationError, setClarificationError] = useState("");
   const [clarificationIsMultiline, setClarificationIsMultiline] =
     useState(false);
+  const [resistanceIsMultiline, setResistanceIsMultiline] = useState(false);
   const clarificationTextareaRef = useRef(null);
+  const resistanceTextareaRef = useRef(null);
   const currentStepText = getStepText(currentStep);
   const isClarificationStep =
     currentStep &&
@@ -98,13 +108,36 @@ function StepCard({
     currentStep &&
     typeof currentStep === "object" &&
     currentStep.step_type === "completion_confirmation";
+  const isClosingChecklistStep =
+    currentStep &&
+    typeof currentStep === "object" &&
+    currentStep.step_type === "closing_checklist";
   const completionCriteria =
     currentStep &&
     typeof currentStep === "object" &&
     !isClarificationStep &&
-    !isCompletionConfirmationStep
+    !isCompletionConfirmationStep &&
+    !isClosingChecklistStep
       ? currentStep.completion_criteria
       : "";
+  const closingChecklistItems =
+    currentStep &&
+    typeof currentStep === "object" &&
+    Array.isArray(currentStep.closing_checklist_items)
+      ? currentStep.closing_checklist_items
+      : [];
+  const closingChecklistTitle =
+    currentStep && typeof currentStep === "object"
+      ? currentStep.closing_checklist_title
+      : "";
+  const completionConfirmationType =
+    currentStep && typeof currentStep === "object"
+      ? currentStep.completion_confirmation_type
+      : "";
+  const isDuplicateConfirmation =
+    completionConfirmationType === "duplicate_step";
+  const isSimpleCompletionConfirmation =
+    completionConfirmationType === "simple_task";
   const inputPlaceholder =
     currentStep && typeof currentStep === "object"
       ? currentStep.input_placeholder
@@ -114,6 +147,11 @@ function StepCard({
     (appStatus === "ready" ||
       appStatus === "executing" ||
       appStatus === "paused");
+  const showReadyStartAction =
+    appStatus === "ready" &&
+    !isClarificationStep &&
+    !isCompletionConfirmationStep &&
+    !isClosingChecklistStep;
   const statusCopy = STATUS_COPY[appStatus] || STATUS_COPY.idle;
   const canSubmitResistanceText =
     resistanceText.trim().length > 0 && !isResolvingResistance;
@@ -165,6 +203,31 @@ function StepCard({
     textarea.style.overflowY = measuredHeight > maximumHeight ? "auto" : "hidden";
   }, [clarificationAnswer, inputPlaceholder, currentStepText]);
 
+  useEffect(() => {
+    const textarea = resistanceTextareaRef.current;
+
+    if (!textarea) {
+      return;
+    }
+
+    const minimumHeight = 44;
+    const maximumHeight = 108;
+    textarea.style.height = `${minimumHeight}px`;
+
+    const measuredHeight = textarea.scrollHeight;
+    const nextHeight = Math.min(
+      Math.max(measuredHeight, minimumHeight),
+      maximumHeight
+    );
+    const isMultiline = measuredHeight > minimumHeight;
+
+    setResistanceIsMultiline((currentValue) =>
+      currentValue === isMultiline ? currentValue : isMultiline
+    );
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY = measuredHeight > maximumHeight ? "auto" : "hidden";
+  }, [resistanceText, resistancePanelOpen]);
+
   function handleResistanceTextSubmit(event) {
     event.preventDefault();
 
@@ -195,37 +258,34 @@ function StepCard({
       aria-labelledby="step-card-title"
     >
       <div className="step-card-header">
-        <div>
-          <p className="section-kicker">
-            {isClarificationStep
-              ? "信息补充"
-              : isCompletionConfirmationStep
-                ? "完成确认"
-                : "当前行动"}
-          </p>
+        <div className="step-card-title-block">
+          <div className="step-card-context-row">
+            <p className="section-kicker">
+              {isClarificationStep
+                ? "信息补充"
+                : isCompletionConfirmationStep
+                  ? "完成确认"
+                  : isClosingChecklistStep
+                    ? "收尾检查"
+                    : "当前行动"}
+            </p>
+            <span className="step-index">第 {currentStepNumber} 步</span>
+          </div>
           <h2 id="step-card-title">
             {isClarificationStep
               ? "需要补充信息"
               : isCompletionConfirmationStep
                 ? "确认是否收尾"
-                : statusCopy.title}
+                : isClosingChecklistStep
+                  ? "确认完成边界"
+                  : statusCopy.title}
           </h2>
-        </div>
-        <div className="step-meta">
-          <span className={`status-pill status-pill--${statusMeta.tone}`}>
-            {isClarificationStep
-              ? "待补充"
-              : isCompletionConfirmationStep
-                ? "待确认"
-                : statusMeta.label}
-          </span>
-          <span className="step-index">第 {currentStepNumber} 步</span>
         </div>
       </div>
 
       {appStatus === "idle" && (
         <div className="empty-action-panel">
-          <p>等待任务输入</p>
+          <p>把任务写在上方，生成后这里会出现当前只做的一步。</p>
         </div>
       )}
 
@@ -244,27 +304,34 @@ function StepCard({
       )}
 
       {showCurrentStep && !isResolvingResistance && (
-        <div className="step-focus">
-          <div className="step-focus-header">
+        <div className="step-main" aria-live="polite">
+          <div className="step-main-meta">
             <span>
               {isClarificationStep
                 ? "需要补充信息"
                 : isCompletionConfirmationStep
-                  ? "简单任务收尾"
-                  : statusCopy.label}
+                  ? isDuplicateConfirmation
+                    ? "重复步骤确认"
+                    : "完成边界确认"
+                  : isClosingChecklistStep
+                    ? closingChecklistTitle || "收尾清单"
+                    : statusCopy.label}
             </span>
             {generationSource === "ai" && (
-              <strong className="source-badge source-badge--ai">
-                AI 返回
-              </strong>
+              <span className="source-note">AI 已生成</span>
             )}
             {isUsingFallback && (
-              <strong className="source-badge source-badge--fallback">
-                备用步骤
-              </strong>
+              <span className="source-note">已切换为低阻力版本</span>
             )}
           </div>
           <p className="current-step-text">{currentStepText}</p>
+          {isClosingChecklistStep && closingChecklistItems.length > 0 && (
+            <ol className="closing-checklist">
+              {closingChecklistItems.map((item, index) => (
+                <li key={`${item}-${index}`}>{item}</li>
+              ))}
+            </ol>
+          )}
           {appStatus === "ready" && isClarificationStep && (
             <form
               className={`clarification-input-row${
@@ -297,7 +364,11 @@ function StepCard({
                 disabled={!canSubmitClarification}
                 type="submit"
               >
-                ✓
+                <SendHorizontal
+                  aria-hidden="true"
+                  className="icon-button-svg"
+                  size={18}
+                />
               </button>
               {clarificationError && (
                 <p className="clarification-error">{clarificationError}</p>
@@ -311,7 +382,16 @@ function StepCard({
                 type="button"
                 onClick={onConfirmSimpleTaskComplete}
               >
-                已经完成
+                <CheckCircle2
+                  aria-hidden="true"
+                  className="button-icon"
+                  size={18}
+                />
+                {isDuplicateConfirmation
+                  ? "跳过重复点"
+                  : isSimpleCompletionConfirmation
+                    ? "已经完成"
+                    : "标记整个任务完成"}
               </button>
               <button
                 className="secondary-action"
@@ -322,63 +402,57 @@ function StepCard({
               </button>
             </div>
           )}
-        </div>
-      )}
-
-      {appStatus === "ready" &&
-        !isClarificationStep &&
-        !isCompletionConfirmationStep && (
+          {appStatus === "ready" && isClosingChecklistStep && (
+            <div className="action-row">
+              <button
+                className="primary-action"
+                type="button"
+                onClick={onConfirmSimpleTaskComplete}
+              >
+                <CheckCircle2
+                  aria-hidden="true"
+                  className="button-icon"
+                  size={18}
+                />
+                标记整个任务完成
+              </button>
+              <button
+                className="secondary-action"
+                type="button"
+                onClick={onRequestSimpleTaskFinalStep}
+              >
+                还差一步
+              </button>
+            </div>
+          )}
+          {showReadyStartAction && (
         <button className="primary-action" onClick={onStartExecuting}>
+          <Play aria-hidden="true" className="button-icon" size={18} />
           开始执行
         </button>
       )}
 
-      {appStatus === "executing" && !isResolvingResistance && (
+          {appStatus === "executing" && (
         <div className="execution-area">
           <button className="primary-action" onClick={onCompleteCurrentStep}>
+            <CheckCircle2 aria-hidden="true" className="button-icon" size={18} />
             完成当前步骤
           </button>
 
           <div className="resistance-entry">
             <button
-              className="link-button"
+              className="link-button resistance-trigger"
               disabled={isResolvingResistance}
               type="button"
               onClick={onToggleResistancePanel}
             >
-              我卡住了
+              <CircleAlert aria-hidden="true" className="button-icon" size={18} />
+              做不了这一小步？换个更小的
             </button>
 
             {resistancePanelOpen && (
               <div className="resistance-panel">
-                <div className="resistance-text-entry">
-                  <label htmlFor="resistance-text">卡点</label>
-                  <form
-                    className="resistance-input-row"
-                    onSubmit={handleResistanceTextSubmit}
-                  >
-                    <input
-                      id="resistance-text"
-                      type="text"
-                      value={resistanceText}
-                      disabled={isResolvingResistance}
-                      onChange={(event) =>
-                        setResistanceText(event.target.value)
-                      }
-                      placeholder="补充当前卡点"
-                    />
-                    <button
-                      aria-label="根据卡点生成更容易继续的一步"
-                      className="resistance-send"
-                      disabled={!canSubmitResistanceText}
-                      type="submit"
-                    >
-                      ✓
-                    </button>
-                  </form>
-                </div>
-
-                <p className="resistance-title">卡住的原因</p>
+                <p className="resistance-title">选一个最接近的卡点</p>
 
                 <div className="resistance-options">
                   {RESISTANCE_OPTIONS.map((option) => (
@@ -393,6 +467,42 @@ function StepCard({
                   ))}
                 </div>
 
+                <div className="resistance-text-entry">
+                  <label htmlFor="resistance-text">也可以补充一句</label>
+                  <form
+                    className={`resistance-input-row${
+                      resistanceIsMultiline
+                        ? " resistance-input-row--multiline"
+                        : ""
+                    }`}
+                    onSubmit={handleResistanceTextSubmit}
+                  >
+                    <textarea
+                      ref={resistanceTextareaRef}
+                      id="resistance-text"
+                      value={resistanceText}
+                      disabled={isResolvingResistance}
+                      onChange={(event) =>
+                        setResistanceText(event.target.value)
+                      }
+                      placeholder="比如：怕写得不好 / 不知道从哪开始"
+                      rows={1}
+                    />
+                    <button
+                      aria-label="根据卡点生成更容易继续的一步"
+                      className="resistance-send"
+                      disabled={!canSubmitResistanceText}
+                      type="submit"
+                    >
+                      <SendHorizontal
+                        aria-hidden="true"
+                        className="icon-button-svg"
+                        size={18}
+                      />
+                    </button>
+                  </form>
+                </div>
+
                 {resistanceResult && (
                   <p className="resistance-result">{resistanceResult}</p>
                 )}
@@ -400,16 +510,20 @@ function StepCard({
             )}
           </div>
         </div>
+          )}
+        </div>
       )}
 
       {appStatus === "paused" && (
-        <div className="result-state">
+        <div className="result-state result-state--reentry">
           {reEntryPoint?.reEntryHint && <p>{reEntryPoint.reEntryHint}</p>}
           <div className="action-row">
             <button className="primary-action" onClick={onResumeCurrentStep}>
+              <RefreshCw aria-hidden="true" className="button-icon" size={18} />
               继续当前步骤
             </button>
             <button className="secondary-action" onClick={onExit}>
+              <ArrowLeft aria-hidden="true" className="button-icon" size={18} />
               返回我的任务
             </button>
           </div>
@@ -419,22 +533,41 @@ function StepCard({
       {appStatus === "completed" && (
         <div className="result-state result-state--success">
           {sessionSummary && <p>{sessionSummary}</p>}
-          <button className="secondary-action" onClick={onExit}>
-            返回我的任务
-          </button>
+          <div className="action-row">
+            <button className="primary-action" onClick={onReset}>
+              <RefreshCw aria-hidden="true" className="button-icon" size={18} />
+              开始新任务
+            </button>
+            <button className="secondary-action" onClick={onExit}>
+              <ArrowLeft aria-hidden="true" className="button-icon" size={18} />
+              返回我的任务
+            </button>
+          </div>
         </div>
       )}
 
       {appStatus === "exited" && (
         <div className="result-state">
           {sessionSummary && <p>{sessionSummary}</p>}
-          <button className="secondary-action" onClick={onExit}>
-            返回我的任务
-          </button>
+          <div className="action-row">
+            <button className="primary-action" onClick={onReset}>
+              <RefreshCw aria-hidden="true" className="button-icon" size={18} />
+              开始新任务
+            </button>
+            <button className="secondary-action" onClick={onExit}>
+              <ArrowLeft aria-hidden="true" className="button-icon" size={18} />
+              返回我的任务
+            </button>
+          </div>
         </div>
       )}
 
-      {errorMessage && <p className="inline-error">{errorMessage}</p>}
+      {errorMessage && (
+        <p className="inline-error">
+          <TriangleAlert aria-hidden="true" className="button-icon" size={18} />
+          {errorMessage}
+        </p>
+      )}
     </section>
   );
 }
