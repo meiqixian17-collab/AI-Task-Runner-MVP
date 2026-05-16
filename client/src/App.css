@@ -1,76 +1,86 @@
 :root {
   /* Surface tokens */
-  --surface-page: #f6f4fc;
-  --surface-card: #ffffff;
-  --surface-subtle: #fbfdff;
-  --surface-muted: #f8fafc;
-  --surface-disabled-subtle: #f1f5f9;
-  --surface-disabled: #e2e8f0;
-  --surface-brand-soft: #ede9fe;
-  --surface-step-focus: #f8f9ff;
-  --surface-execution-panel: #fdfdff;
-  --surface-success: #e8f8f1;
-  --surface-warning: #fff7df;
-  --surface-error: #fef3f2;
-  --surface-important: #fffaf0;
-  --surface-resistance: #fffdf6;
-  --surface-loading-track: #e3e4fb;
-  --surface-scrim: rgba(15, 23, 42, 0.34);
+  --surface-page: #fafaf5;
+  --surface-card: #fffdf8;
+  --surface-subtle: #fff9ee;
+  --surface-muted: #f4f0e6;
+  --surface-disabled-subtle: #eee9df;
+  --surface-disabled: #e1d9ce;
+  --surface-brand-soft: #fff4df;
+  --surface-step-card: #fffaf1;
+  --surface-execution-panel: #fffaf1;
+  --surface-success: #e8f7ef;
+  --surface-warning: #fff0cf;
+  --surface-error: #fff1ee;
+  --surface-important: #fff4d9;
+  --surface-resistance: #fff8e7;
+  --surface-loading-track: #f4dfb8;
+  --surface-scrim: rgba(45, 35, 24, 0.34);
 
   /* Text tokens */
-  --text-primary: #111827;
-  --text-secondary: #5f6f8a;
-  --text-disabled: #94a3b8;
-  --text-on-brand: #ffffff;
+  --text-primary: #241b12;
+  --text-secondary: #6f6254;
+  --text-disabled: #a39a8c;
+  --text-on-brand: #fffaf0;
 
   /* Brand tokens */
-  --brand-primary: #6157d8;
-  --brand-primary-hover: #5146c4;
-  --brand-ai-text: #6d5bd0;
+  --brand-primary: #aa6116;
+  --brand-primary-hover: #8f4f0f;
+  --brand-ai-text: #9f6218;
 
   /* Accent tokens */
-  --accent-success: #12a37f;
-  --accent-success-strong: #0f766e;
-  --accent-warning: #d97706;
-  --accent-important: #f2b705;
+  --accent-success: #178a63;
+  --accent-success-strong: #11684d;
+  --accent-warning: #c46a10;
+  --accent-important: #e4a11b;
   --accent-error: #b42318;
   --accent-error-strong: #991b1b;
 
   /* Border tokens */
-  --border-default: #dedcf0;
-  --border-brand-subtle: #d7d8f7;
-  --border-execution-panel: #c8cae2;
-  --border-disabled: #cbd5e1;
+  --border-default: #e6dccb;
+  --border-brand-subtle: #e8c98f;
+  --border-execution-panel: #e0c89f;
+  --border-disabled: #d7cec0;
   --border-error-subtle: #fecaca;
   --border-error-hover: #fca5a5;
-  --border-warning: #f1dfb8;
-  --border-warning-accent: #f5c467;
-  --border-important: #f4d37a;
-  --border-focus-ring: rgba(91, 91, 200, 0.22);
+  --border-warning: #ead2a3;
+  --border-warning-accent: #d89b38;
+  --border-important: #e8bb51;
+  --border-focus-ring: rgba(170, 97, 22, 0.22);
 
   /* Shadow tokens */
-  --shadow-card: 0 10px 30px rgba(15, 23, 42, 0.08),
-    0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-execution-panel: 0 18px 42px rgba(15, 23, 42, 0.1),
-    0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow-hover: 0 16px 40px rgba(15, 23, 42, 0.12),
-    0 2px 8px rgba(15, 23, 42, 0.06);
-  --shadow-subtle: 0 1px 2px rgba(15, 23, 42, 0.03);
-  --shadow-dialog: 0 24px 60px rgba(15, 23, 42, 0.22);
-  --shadow-primary: 0 10px 22px rgba(97, 87, 216, 0.24);
-  --shadow-primary-hover: 0 13px 26px rgba(97, 87, 216, 0.28);
+  --shadow-card: 0 10px 30px rgba(58, 42, 26, 0.08),
+    0 1px 2px rgba(58, 42, 26, 0.04);
+  --shadow-execution-panel: 0 18px 42px rgba(58, 42, 26, 0.1),
+    0 1px 2px rgba(58, 42, 26, 0.05);
+  --shadow-hover: 0 16px 40px rgba(58, 42, 26, 0.12),
+    0 2px 8px rgba(58, 42, 26, 0.06);
+  --shadow-subtle: 0 1px 2px rgba(58, 42, 26, 0.03);
+  --shadow-dialog: 0 24px 60px rgba(45, 35, 24, 0.22);
+  --shadow-primary: 0 8px 18px rgba(170, 97, 22, 0.18);
+  --shadow-primary-hover: 0 10px 22px rgba(143, 79, 15, 0.22);
   --shadow-important-mark: 0 1px 0 rgba(146, 64, 14, 0.18);
+  --shadow-step-card: 0 18px 44px rgba(116, 71, 20, 0.09),
+    0 4px 14px rgba(58, 42, 26, 0.05);
 
   /* Shape and control tokens */
   --radius-card: 8px;
   --radius-control: 8px;
   --radius-pill: 999px;
+  --radius-step-card: 20px;
   --radius-sheet: 16px;
   --control-height-primary: 48px;
   --control-height-secondary: 48px;
   --control-height-ghost: 40px;
   --control-size-icon: 42px;
   --control-size-send: 44px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-2xl: 24px;
+  --space-3xl: 32px;
 }
 
 * {
