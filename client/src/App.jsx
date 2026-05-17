@@ -1,5 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  ArrowLeft,
+  CheckCircle2,
+  ChevronRight,
+  History,
+  MoreVertical,
+  Plus,
+  Sparkles,
+  Star,
+  Trash2
+} from "lucide-react";
+import {
   generateFirstStep,
   generateNextStep,
   resolveResistanceWithAi
@@ -19,19 +30,25 @@ import {
   shouldAskSimpleTaskCompletion
 } from "./simpleTaskCompletion.mjs";
 import {
-  MAX_DUPLICATE_RETRY_COUNT,
   buildDuplicateRetryContext,
   getDuplicateStepDecision
 } from "./duplicateRetry.mjs";
 import { isDuplicateStepEntry } from "./stepDuplicate.mjs";
 import {
   COMPLETION_CONFIRMATION_TYPES,
+  createTaskCompletionConfirmationStep,
   createNormalTaskCompletionCheckpointStep,
-  shouldAskNormalTaskCompletionCheckpoint,
-  shouldAskNormalTaskDuplicateCheckpoint,
+  getCompletionConfirmationType,
   shouldContinueCompletionConfirmationWithAi
 } from "./taskCompletionCheckpoint.mjs";
+import {
+  COMPLETION_ACTIONS,
+  createClosingChecklistStep,
+  createClosingFollowupStep,
+  decideCompletionBoundary
+} from "./taskCompletionModel.mjs";
 import StepCard from "./StepCard.jsx";
+import StatusPill, { getStatusPillMeta } from "./StatusPill.jsx";
 
 const APP_STATUS = {
   IDLE: "idle",
@@ -52,7 +69,6 @@ const GENERATION_SOURCE = {
 const STEP_SOURCE = {
   AI: "ai",
   DUPLICATE_RETRY: "duplicate_retry",
-  DUPLICATE_FALLBACK: "duplicate_fallback",
   LOCAL_RULE: "local_rule",
   GENERIC_FALLBACK: "generic_fallback",
   RESISTANCE_AI: "resistance_ai",
@@ -105,13 +121,13 @@ const CLARIFICATION_RULES = {
     {
       key: "brand_name",
       question: "告诉我你的店铺或品牌叫什么名字？",
-      placeholder: "Example: cafe name / shop name",
+      placeholder: "例如：小岛咖啡 / 有光手作",
       required: true
     },
     {
       key: "business_type",
       question: "这个店铺主要卖什么？",
-      placeholder: "Example: coffee, handmade accessories, pet supplies",
+      placeholder: "例如：咖啡 / 手作饰品 / 宠物用品",
       required: true
     }
   ],
@@ -119,13 +135,13 @@ const CLARIFICATION_RULES = {
     {
       key: "recipient",
       question: "这条消息是发给谁的？",
-      placeholder: "Example: teacher, classmate, HR, friend",
+      placeholder: "例如：老师 / 同学 / HR / 朋友",
       required: true
     },
     {
       key: "message_goal",
       question: "你希望这条消息达到什么目的？",
-      placeholder: "Example: ask leave, apologize, ask progress",
+      placeholder: "例如：请假 / 道歉 / 询问进度",
       required: true
     }
   ],
@@ -133,7 +149,7 @@ const CLARIFICATION_RULES = {
     {
       key: "target_position",
       question: "这份简历主要投什么岗位？",
-      placeholder: "Example: AI product intern, UI design intern",
+      placeholder: "例如：AI 产品实习生 / UI 设计实习生",
       required: true
     }
   ],
@@ -141,7 +157,7 @@ const CLARIFICATION_RULES = {
     {
       key: "current_stage",
       question: "你的作品集现在做到哪一步了？",
-      placeholder: "Example: not selected / selected but not organized",
+      placeholder: "例如：还没选项目 / 已选项目但没整理",
       required: true
     }
   ],
@@ -157,7 +173,7 @@ const CLARIFICATION_RULES = {
     {
       key: "focus_area",
       question: "你现在最想先推进哪一部分？",
-      placeholder: "Example: study, job search, health, project",
+      placeholder: "例如：学习 / 求职 / 健康 / 项目",
       required: true
     }
   ],
@@ -165,7 +181,7 @@ const CLARIFICATION_RULES = {
     {
       key: "task_object",
       question: "你要处理的具体对象是什么？",
-      placeholder: "Example: report, page, course material",
+      placeholder: "例如：报告 / 页面 / 课程材料",
       required: true
     }
   ],
@@ -181,7 +197,7 @@ const CLARIFICATION_RULES = {
     {
       key: "concrete_task",
       question: "你希望我先帮你推进哪一个具体任务？",
-      placeholder: "Example: list pros and cons / find 3 roles",
+      placeholder: "例如：列优缺点 / 找 3 个岗位",
       required: true
     }
   ]
@@ -578,6 +594,7 @@ function App() {
       <TaskExecutionPage
         task={selectedTask}
         onBack={handleBackToList}
+        onStartNewTask={handleCreateTask}
         onUpdateTask={updateTask}
       />
     );
@@ -603,6 +620,8 @@ function MyTasksPage({
 }) {
   const longPressTimers = useRef({});
   const suppressNextClick = useRef(false);
+  const taskMenuRef = useRef(null);
+  const deleteDialogRef = useRef(null);
   const [menuTaskId, setMenuTaskId] = useState(null);
   const [deleteConfirmTaskId, setDeleteConfirmTaskId] = useState(null);
   const [completedOpen, setCompletedOpen] = useState(false);
@@ -625,6 +644,69 @@ function MyTasksPage({
   const completedTasks = sortedTasks.filter(
     (task) => task.status === APP_STATUS.COMPLETED
   );
+  const listHeaderStatus =
+    activeTasks.length > 0
+      ? {
+          label: `${activeTasks.length} 个进行中`,
+          status: APP_STATUS.READY
+        }
+      : completedTasks.length > 0
+        ? {
+            label: `${completedTasks.length} 个已完成`,
+            status: APP_STATUS.COMPLETED
+          }
+        : {
+            label: "待输入",
+            status: APP_STATUS.IDLE
+          };
+
+  useEffect(() => {
+    const activeDialog = deleteConfirmTask
+      ? deleteDialogRef.current
+      : activeMenuTask
+        ? taskMenuRef.current
+        : null;
+
+    if (!activeDialog) {
+      return;
+    }
+
+    const focusableElements = getFocusableElements(activeDialog);
+    focusableElements[0]?.focus();
+
+    function handleDialogKeyDown(event) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (deleteConfirmTask) {
+          setDeleteConfirmTaskId(null);
+        } else {
+          setMenuTaskId(null);
+        }
+        return;
+      }
+
+      if (event.key !== "Tab" || focusableElements.length === 0) {
+        return;
+      }
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    }
+
+    activeDialog.addEventListener("keydown", handleDialogKeyDown);
+
+    return () => {
+      activeDialog.removeEventListener("keydown", handleDialogKeyDown);
+    };
+  }, [activeMenuTask, deleteConfirmTask]);
 
   function openTaskMenu(taskId) {
     suppressNextClick.current = true;
@@ -654,6 +736,12 @@ function MyTasksPage({
     }
 
     onSelectTask(taskId);
+  }
+
+  function handleTaskMenuButtonClick(event, taskId) {
+    event.stopPropagation();
+    clearLongPress(taskId);
+    openTaskMenu(taskId);
   }
 
   function handleToggleImportant() {
@@ -689,14 +777,21 @@ function MyTasksPage({
         <div className="page-title-stack">
           <p className="eyebrow">AI Task Runner</p>
           <div className="title-row title-row--spread">
-            <h1>我的任务</h1>
+            <div className="title-with-status">
+              <h1>我的任务</h1>
+              <StatusPill
+                className="header-status-pill"
+                label={listHeaderStatus.label}
+                status={listHeaderStatus.status}
+              />
+            </div>
             <button
               aria-label="创建新任务"
               className="create-task-button"
               type="button"
               onClick={onCreateTask}
             >
-              +
+              <Plus aria-hidden="true" className="icon-button-svg" size={22} />
             </button>
           </div>
         </div>
@@ -704,13 +799,23 @@ function MyTasksPage({
 
       {tasks.length === 0 ? (
         <section className="surface-card tasks-empty" aria-live="polite">
-          <h2>还没有任务</h2>
-          <p>创建一个任务，让 AI 帮你迈出第一步。</p>
+          <StatusPill status="idle" size="sm" />
+          <h2>把任何「不知道从哪开始」的任务交给 AI，生成可执行的下一步</h2>
+          <p>不用先想完整计划，先把事情放进来。</p>
+          <button
+            className="primary-action"
+            type="button"
+            onClick={onCreateTask}
+          >
+            <Plus aria-hidden="true" className="button-icon" size={18} />
+            创建第一个任务
+          </button>
         </section>
       ) : (
         <>
           {activeTasks.length === 0 ? (
             <section className="surface-card tasks-empty" aria-live="polite">
+              <StatusPill status="completed" size="sm" />
               <h2>暂无未完成任务</h2>
               <p>新的任务会继续出现在这里。</p>
             </section>
@@ -723,13 +828,11 @@ function MyTasksPage({
                   const detail = getTaskListDetail(task);
 
                   return (
-                    <button
+                    <div
                       className={`task-list-item${
                         task.isImportant ? " task-list-item--important" : ""
                       }`}
                       key={task.id}
-                      type="button"
-                      onClick={() => handleTaskClick(task.id)}
                       onContextMenu={(event) => {
                         event.preventDefault();
                         openTaskMenu(task.id);
@@ -742,18 +845,29 @@ function MyTasksPage({
                       onTouchMove={() => clearLongPress(task.id)}
                       onTouchStart={() => startLongPress(task.id)}
                     >
+                      <button
+                        className="task-list-main"
+                        type="button"
+                        onClick={() => handleTaskClick(task.id)}
+                      >
                       <span
                         aria-hidden="true"
-                        className={`task-status-icon task-status-icon--${statusMeta.tone}`}
+                        className={`task-status-icon task-status-icon--${
+                          task.errorMessage ? "error" : statusMeta.tone
+                        }`}
                       >
-                        {getTaskStatusIcon(task.status)}
+                        {getTaskStatusIcon(task.status, Boolean(task.errorMessage))}
                       </span>
                       <span className="task-list-content">
                         <strong>
                           {task.isImportant && (
-                            <span className="important-mark" aria-label="重要任务">
-                              ★
-                            </span>
+                            <Star
+                              aria-label="重要任务"
+                              className="important-mark"
+                              fill="currentColor"
+                              role="img"
+                              size={15}
+                            />
                           )}
                           {task.title || "未命名任务"}
                         </strong>
@@ -767,7 +881,27 @@ function MyTasksPage({
                           </time>
                         </span>
                       </span>
-                    </button>
+                      <StatusPill
+                        className="task-list-status"
+                        status={task.errorMessage ? "error" : task.status}
+                        size="sm"
+                      />
+                      </button>
+                      <button
+                        aria-label={`打开${task.title || "未命名任务"}的任务操作`}
+                        className="task-row-menu-button"
+                        type="button"
+                        onClick={(event) => handleTaskMenuButtonClick(event, task.id)}
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onTouchStart={(event) => event.stopPropagation()}
+                      >
+                        <MoreVertical
+                          aria-hidden="true"
+                          className="icon-button-svg"
+                          size={18}
+                        />
+                      </button>
+                    </div>
                   );
                 })}
               </section>
@@ -786,31 +920,42 @@ function MyTasksPage({
                 type="button"
                 onClick={() => setCompletedOpen((isOpen) => !isOpen)}
               >
-                <span id="completed-tasks-title">已完成任务</span>
+                <span className="completed-tasks-title" id="completed-tasks-title">
+                  <CheckCircle2
+                    aria-hidden="true"
+                    className="heading-icon"
+                    size={16}
+                  />
+                  已完成任务
+                </span>
                 <span aria-hidden="true" className="completed-tasks-meta">
                   {completedTasks.length} 个
-                  <span
+                  <ChevronRight
                     className={`completed-tasks-chevron${
                       completedOpen ? " completed-tasks-chevron--open" : ""
                     }`}
-                  >
-                    &gt;
-                  </span>
+                    size={18}
+                  />
                 </span>
               </button>
 
               {completedOpen && (
                 <ul className="completed-task-list" id="completed-tasks-list">
                   {completedTasks.map((task) => {
-                    const statusMeta = getStatusMeta(task.status);
-
                     return (
                       <li className="completed-task-row" key={task.id}>
-                        <button
+                        <div
                           aria-label={`查看${task.title || "未命名任务"}的完成记录`}
                           className="completed-task-item"
-                          type="button"
+                          role="button"
+                          tabIndex={0}
                           onClick={() => handleTaskClick(task.id)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              handleTaskClick(task.id);
+                            }
+                          }}
                           onContextMenu={(event) => {
                             event.preventDefault();
                             openTaskMenu(task.id);
@@ -824,10 +969,8 @@ function MyTasksPage({
                           onTouchStart={() => startLongPress(task.id)}
                         >
                           <strong>{task.title || "未命名任务"}</strong>
-                          <span className={`status-pill status-pill--${statusMeta.tone}`}>
-                            {statusMeta.label}
-                          </span>
-                        </button>
+                          <StatusPill status={task.status} size="sm" />
+                        </div>
                       </li>
                     );
                   })}
@@ -846,13 +989,21 @@ function MyTasksPage({
         >
           <section
             aria-labelledby="task-menu-title"
+            aria-modal="true"
             className="task-action-sheet"
+            ref={taskMenuRef}
             role="dialog"
             onClick={(event) => event.stopPropagation()}
           >
             <h2 id="task-menu-title">{activeMenuTask.title || "未命名任务"}</h2>
             {!isActiveMenuTaskCompleted && (
               <button type="button" onClick={handleToggleImportant}>
+                <Star
+                  aria-hidden="true"
+                  className="button-icon"
+                  fill={activeMenuTask.isImportant ? "currentColor" : "none"}
+                  size={18}
+                />
                 {activeMenuTask.isImportant ? "取消重要" : "标记为重要"}
               </button>
             )}
@@ -861,6 +1012,7 @@ function MyTasksPage({
               type="button"
               onClick={handleRequestDelete}
             >
+              <Trash2 aria-hidden="true" className="button-icon" size={18} />
               删除任务
             </button>
             <button type="button" onClick={() => setMenuTaskId(null)}>
@@ -878,7 +1030,9 @@ function MyTasksPage({
         >
           <section
             aria-labelledby="delete-task-title"
+            aria-modal="true"
             className="confirm-dialog"
+            ref={deleteDialogRef}
             role="alertdialog"
             onClick={(event) => event.stopPropagation()}
           >
@@ -893,6 +1047,7 @@ function MyTasksPage({
                 type="button"
                 onClick={handleConfirmDelete}
               >
+                <Trash2 aria-hidden="true" className="button-icon" size={18} />
                 删除
               </button>
             </div>
@@ -903,10 +1058,31 @@ function MyTasksPage({
   );
 }
 
-function TaskExecutionPage({ task, onBack, onUpdateTask }) {
+function getFocusableElements(container) {
+  return Array.from(
+    container.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )
+  );
+}
+
+function getReadableFallbackMessage(error) {
+  const message = String(error?.message || "");
+  const isTimeout =
+    error?.name === "RequestTimeoutError" || /timeout|timed out/i.test(message);
+
+  if (isTimeout) {
+    return "响应慢了，我先给你一个不用等 AI 也能开始的备用动作。";
+  }
+
+  return "生成没有顺利完成，我先给你一个可执行的备用动作。";
+}
+
+function TaskExecutionPage({ task, onBack, onStartNewTask, onUpdateTask }) {
   const [loadingMessage, setLoadingMessage] = useState("");
   const [isResolvingResistance, setIsResolvingResistance] = useState(false);
   const [resistanceLoadingMessage, setResistanceLoadingMessage] = useState("");
+  const [progressOpen, setProgressOpen] = useState(false);
   const resistanceLoadingTimers = useRef([]);
 
   const taskInput = task.title;
@@ -947,7 +1123,7 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
     }, 2000);
 
     const slowTimer = setTimeout(() => {
-      setLoadingMessage("生成较慢，优先返回可执行步骤");
+      setLoadingMessage("如果继续变慢，我会自动给你备用步骤");
     }, 5000);
 
     return () => {
@@ -1144,11 +1320,19 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
     });
     clearSavedReEntryPoint();
 
-    if (shouldCompleteTask(taskInput, nextHistory, currentStep)) {
-      updateCurrentTask({
-        status: APP_STATUS.COMPLETED,
-        sessionSummary: "当前任务已自然闭环，不再生成下一步。"
-      });
+    const completionDecision = decideCompletionBoundary({
+      taskTitle: taskInput,
+      completedStep,
+      stepHistory: nextHistory
+    });
+
+    if (
+      applyCompletionBoundaryDecision(
+        completionDecision,
+        taskInput,
+        nextHistory
+      )
+    ) {
       return;
     }
 
@@ -1159,18 +1343,6 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
       })
     ) {
       showSimpleTaskCompletionConfirmation(taskInput);
-      return;
-    }
-
-    if (
-      shouldAskNormalTaskCompletionCheckpoint({
-        taskTitle: taskInput,
-        stepHistory: nextHistory,
-        completionCheckpointDismissedAtStepCount:
-          task.completionCheckpointDismissedAtStepCount
-      })
-    ) {
-      showNormalTaskCompletionCheckpoint(taskInput, nextHistory);
       return;
     }
 
@@ -1375,68 +1547,16 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
         return;
       }
 
-      if (
-        duplicateDecision.action !== "accept" &&
-        shouldAskNormalTaskDuplicateCheckpoint({
+      if (duplicateDecision.action !== "accept") {
+        showDuplicateStepConfirmation(
           taskTitle,
-          stepHistory: historyForCompare,
-          completionCheckpointDismissedAtStepCount:
-            options.completionCheckpointDismissedAtStepCount ??
-            task.completionCheckpointDismissedAtStepCount
-        })
-      ) {
-        showNormalTaskCompletionCheckpoint(taskTitle, historyForCompare, {
-          duplicateRetry: buildPendingDuplicateRetryContext({
-            rejectedStep: nextStep,
-            historyForCompare,
-            duplicateDecision
-          })
-        });
-        return;
-      }
-
-      if (duplicateDecision.action === "retry") {
-        try {
-          setLoadingMessage("正在根据上一步重新生成下一步");
-          const retryData = await regenerateAfterDuplicateStep({
-            taskTitle,
-            rejectedStep: nextStep,
-            historyForCompare,
-            taskContext: effectiveTaskContext,
-            duplicateRetryCount: duplicateDecision.nextDuplicateRetryCount,
-            rejectedSteps: duplicateDecision.rejectedSteps
-          });
-
-          await applyGeneratedStep(retryData, taskTitle, historyForCompare, {
-            ...options,
-            duplicateRetryCount: duplicateDecision.nextDuplicateRetryCount,
-            rejectedSteps: duplicateDecision.rejectedSteps,
-            stepSource: STEP_SOURCE.DUPLICATE_RETRY,
-            sourceReason: `Regenerated after duplicate-step rejection (${duplicateDecision.nextDuplicateRetryCount}/${MAX_DUPLICATE_RETRY_COUNT}).`
-          });
-          return;
-        } catch (error) {
-          applyDuplicateFallbackStep(
-            taskTitle,
-            historyForCompare,
-            error?.message
-              ? `重复步骤重试失败：${error.message}`
-              : "重复步骤重试失败。"
-          );
-          return;
-        }
-      }
-
-      if (duplicateDecision.action === "fallback") {
-        applyDuplicateFallbackStep(
-          taskTitle,
+          nextStep,
           historyForCompare,
-          duplicateDecision.duplicateRetryCount >= MAX_DUPLICATE_RETRY_COUNT
-            ? "AI 重试后仍然返回了重复步骤。"
-            : "AI 生成了重复步骤。"
+          duplicateDecision
         );
         return;
       }
+
     }
 
     if (
@@ -1467,15 +1587,37 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
 
       applyFallbackStep(
         taskTitle,
-        new Error("AI requested unsupported non-text input."),
+        new Error("当前步骤需要图片、文件或音频，但这里暂时只支持文字推进。"),
         historyForCompare
       );
       return;
     }
 
+    if (data.isTaskComplete) {
+      const completionDecision = decideCompletionBoundary({
+        taskTitle,
+        completedStep: data.step || data.sessionSummary || "",
+        stepHistory: historyForCompare,
+        aiSuggestedComplete: true
+      });
+
+      if (
+        applyCompletionBoundaryDecision(
+          completionDecision,
+          taskTitle,
+          historyForCompare
+        )
+      ) {
+        return;
+      }
+
+      showTaskCompletionConfirmation(taskTitle, completionDecision);
+      return;
+    }
+
     updateCurrentTask({
       currentStep: nextStep,
-      status: data.isTaskComplete ? APP_STATUS.COMPLETED : APP_STATUS.READY,
+      status: APP_STATUS.READY,
       sessionSummary: data.sessionSummary || "",
       errorMessage: "",
       generationSource: GENERATION_SOURCE.AI,
@@ -1545,11 +1687,164 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
     clearSavedReEntryPoint();
   }
 
-  function handleConfirmSimpleTaskComplete() {
+  function applyCompletionBoundaryDecision(
+    decision,
+    taskTitle,
+    historyForCompare = stepHistory
+  ) {
+    if (!decision || typeof decision !== "object") {
+      return false;
+    }
+
+    if (decision.action === COMPLETION_ACTIONS.SHOW_CLOSING_CHECKLIST) {
+      showClosingChecklist(taskTitle, decision);
+      return true;
+    }
+
+    if (decision.action === COMPLETION_ACTIONS.ASK_TASK_COMPLETION) {
+      showTaskCompletionConfirmation(taskTitle, decision);
+      return true;
+    }
+
+    if (decision.action === COMPLETION_ACTIONS.OFFER_SESSION_COMPLETION) {
+      updateCurrentTask({
+        currentStep: "",
+        status: APP_STATUS.EXITED,
+        stepHistory: historyForCompare,
+        sessionSummary: "本轮推进已收住，任务还没有标记为完成。",
+        errorMessage: "",
+        generationSource: GENERATION_SOURCE.NONE,
+        reEntryPoint: null,
+        resistancePanelOpen: false,
+        selectedResistanceType: "",
+        resistanceFeedback: "",
+        interruptedStep: "",
+        resistanceDiagnosis: null,
+        resistanceResolution: null
+      });
+      clearSavedReEntryPoint();
+      return true;
+    }
+
+    return false;
+  }
+
+  function showClosingChecklist(taskTitle, decision) {
+    updateCurrentTask({
+      currentStep: normalizeCurrentStep(
+        createClosingChecklistStep(taskTitle, decision),
+        {
+          taskTitle,
+          stage: "finish",
+          source: STEP_SOURCE.LOCAL_RULE,
+          sourceReason: "Generated by local closing-boundary rules."
+        }
+      ),
+      status: APP_STATUS.READY,
+      sessionSummary: "",
+      errorMessage: "",
+      generationSource: GENERATION_SOURCE.NONE,
+      reEntryPoint: null,
+      resistancePanelOpen: false,
+      selectedResistanceType: "",
+      resistanceFeedback: "",
+      interruptedStep: "",
+      resistanceDiagnosis: null,
+      resistanceResolution: null
+    });
+    clearSavedReEntryPoint();
+  }
+
+  function showTaskCompletionConfirmation(taskTitle, decision = {}) {
+    updateCurrentTask({
+      currentStep: normalizeCurrentStep(
+        createTaskCompletionConfirmationStep(taskTitle, {
+          completion_confirmation_type:
+            COMPLETION_CONFIRMATION_TYPES.TASK_COMPLETION,
+          step_text:
+            "看起来这件事已经到完成边界。要把整个任务标记为已完成吗？"
+        }),
+        {
+          taskTitle,
+          stage: "finish",
+          source: STEP_SOURCE.LOCAL_RULE,
+          sourceReason:
+            decision.reason || "Generated by local completion-boundary rules."
+        }
+      ),
+      status: APP_STATUS.READY,
+      sessionSummary: "",
+      errorMessage: "",
+      generationSource: GENERATION_SOURCE.NONE,
+      reEntryPoint: null,
+      resistancePanelOpen: false,
+      selectedResistanceType: "",
+      resistanceFeedback: "",
+      interruptedStep: "",
+      resistanceDiagnosis: null,
+      resistanceResolution: null
+    });
+    clearSavedReEntryPoint();
+  }
+
+  function showDuplicateStepConfirmation(
+    taskTitle,
+    rejectedStep,
+    historyForCompare,
+    duplicateDecision
+  ) {
+    updateCurrentTask({
+      currentStep: normalizeCurrentStep(
+        createTaskCompletionConfirmationStep(taskTitle, {
+          completion_confirmation_type: COMPLETION_CONFIRMATION_TYPES.DUPLICATE_STEP,
+          step_text:
+            "下一步和前面已经做过的内容很像。这里不是确认整个任务完成，只是确认这个重复点是否已经可以跳过。",
+          pending_duplicate_retry: {
+            rejectedStep: getStepText(rejectedStep),
+            duplicateRetryCount: duplicateDecision.duplicateRetryCount + 1,
+            rejectedSteps: duplicateDecision.rejectedSteps || [],
+            previousStep: getStepText(historyForCompare[historyForCompare.length - 1])
+          }
+        }),
+        {
+          taskTitle,
+          stage: "finish",
+          source: STEP_SOURCE.LOCAL_RULE,
+          sourceReason: "Generated by local duplicate-step confirmation rules."
+        }
+      ),
+      status: APP_STATUS.READY,
+      sessionSummary: "",
+      errorMessage: "",
+      generationSource: GENERATION_SOURCE.NONE,
+      reEntryPoint: null,
+      resistancePanelOpen: false,
+      selectedResistanceType: "",
+      resistanceFeedback: "",
+      interruptedStep: "",
+      resistanceDiagnosis: null,
+      resistanceResolution: null
+    });
+    clearSavedReEntryPoint();
+  }
+
+  async function handleConfirmSimpleTaskComplete() {
+    const confirmationType = getCompletionConfirmationType(currentStep);
+
+    if (confirmationType === COMPLETION_CONFIRMATION_TYPES.DUPLICATE_STEP) {
+      await handleContinueAfterDuplicateConfirmation();
+      return;
+    }
+
+    const summary =
+      confirmationType === COMPLETION_CONFIRMATION_TYPES.SIMPLE_TASK
+        ? "已确认这个简单任务完成。"
+        : "已确认整个任务完成。";
+
     updateCurrentTask({
       currentStep: "",
       status: APP_STATUS.COMPLETED,
-      sessionSummary: "已确认这个简单任务完成。",
+      sessionSummary: summary,
       errorMessage: "",
       generationSource: GENERATION_SOURCE.NONE,
       reEntryPoint: null,
@@ -1564,6 +1859,93 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
   }
 
   async function handleRequestCompletionContinuation() {
+    if (
+      currentStep &&
+      typeof currentStep === "object" &&
+      currentStep.step_type === "closing_checklist"
+    ) {
+      updateCurrentTask({
+        currentStep: normalizeCurrentStep(
+          createClosingFollowupStep(taskInput, currentStep),
+          {
+            taskTitle: taskInput,
+            stage: "finish",
+            source: STEP_SOURCE.LOCAL_RULE,
+            sourceReason: "Generated one local follow-up from the closing checklist."
+          }
+        ),
+        status: APP_STATUS.READY,
+        sessionSummary: "",
+        errorMessage: "",
+        generationSource: GENERATION_SOURCE.NONE,
+        reEntryPoint: null,
+        resistancePanelOpen: false,
+        selectedResistanceType: "",
+        resistanceFeedback: "",
+        interruptedStep: "",
+        resistanceDiagnosis: null,
+        resistanceResolution: null
+      });
+      clearSavedReEntryPoint();
+      return;
+    }
+
+    const confirmationType = getCompletionConfirmationType(currentStep);
+
+    if (
+      confirmationType === COMPLETION_CONFIRMATION_TYPES.TASK_COMPLETION ||
+      confirmationType === COMPLETION_CONFIRMATION_TYPES.DUPLICATE_STEP
+    ) {
+      if (confirmationType === COMPLETION_CONFIRMATION_TYPES.DUPLICATE_STEP) {
+        updateCurrentTask({
+          currentStep: withStepSource(
+            getNonDuplicateFallbackStep(taskInput, stepHistory),
+            STEP_SOURCE.LOCAL_RULE,
+            "Generated a local non-duplicate step after duplicate confirmation."
+          ),
+          status: APP_STATUS.READY,
+          sessionSummary: "",
+          errorMessage: "",
+          generationSource: GENERATION_SOURCE.NONE,
+          reEntryPoint: null,
+          resistancePanelOpen: false,
+          selectedResistanceType: "",
+          resistanceFeedback: "",
+          interruptedStep: "",
+          resistanceDiagnosis: null,
+          resistanceResolution: null
+        });
+        clearSavedReEntryPoint();
+        return;
+      }
+
+      updateCurrentTask({
+        currentStep: normalizeCurrentStep(
+          createClosingFollowupStep(taskInput, currentStep),
+          {
+            taskTitle: taskInput,
+            stage: "finish",
+            source: STEP_SOURCE.LOCAL_RULE,
+            sourceReason:
+              "Generated one local finishing step after completion confirmation."
+          }
+        ),
+        status: APP_STATUS.READY,
+        sessionSummary: "",
+        errorMessage: "",
+        generationSource: GENERATION_SOURCE.NONE,
+        reEntryPoint: null,
+        resistancePanelOpen: false,
+        selectedResistanceType: "",
+        resistanceFeedback: "",
+        interruptedStep: "",
+        resistanceDiagnosis: null,
+        resistanceResolution: null
+      });
+      clearSavedReEntryPoint();
+      return;
+    }
+
     if (shouldContinueCompletionConfirmationWithAi(currentStep)) {
       await handleContinueAfterNormalTaskCheckpoint();
       return;
@@ -1652,19 +2034,63 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
     }
   }
 
-  function buildPendingDuplicateRetryContext({
-    rejectedStep,
-    historyForCompare,
-    duplicateDecision
-  }) {
-    return {
-      rejectedStep: getStepText(rejectedStep),
-      duplicateRetryCount:
-        duplicateDecision.nextDuplicateRetryCount ||
-        duplicateDecision.duplicateRetryCount + 1,
-      rejectedSteps: duplicateDecision.rejectedSteps || [],
-      previousStep: getStepText(historyForCompare[historyForCompare.length - 1])
-    };
+  async function handleContinueAfterDuplicateConfirmation() {
+    const pendingDuplicateRetry =
+      currentStep &&
+      typeof currentStep === "object" &&
+      currentStep.pending_duplicate_retry &&
+      typeof currentStep.pending_duplicate_retry === "object"
+        ? currentStep.pending_duplicate_retry
+        : null;
+
+    updateCurrentTask({
+      currentStep: "",
+      status: APP_STATUS.LOADING,
+      sessionSummary: "",
+      errorMessage: "",
+      generationSource: GENERATION_SOURCE.NONE,
+      reEntryPoint: null,
+      resistancePanelOpen: false,
+      selectedResistanceType: "",
+      resistanceFeedback: "",
+      interruptedStep: "",
+      resistanceDiagnosis: null,
+      resistanceResolution: null
+    });
+    clearSavedReEntryPoint();
+
+    try {
+      const data = pendingDuplicateRetry
+        ? await regenerateAfterDuplicateStep({
+            taskTitle: taskInput,
+            rejectedStep: pendingDuplicateRetry.rejectedStep,
+            historyForCompare: stepHistory,
+            taskContext: task.taskContext,
+            duplicateRetryCount: pendingDuplicateRetry.duplicateRetryCount,
+            rejectedSteps: pendingDuplicateRetry.rejectedSteps
+          })
+        : await generateNextStep(
+            buildTaskGenerationPayload({
+              taskTitle: taskInput,
+              taskContext: task.taskContext,
+              stepHistory
+            }),
+            stepHistory
+          );
+
+      await applyGeneratedStep(data, taskInput, stepHistory, {
+        duplicateRetryCount: pendingDuplicateRetry?.duplicateRetryCount,
+        rejectedSteps: pendingDuplicateRetry?.rejectedSteps,
+        stepSource: pendingDuplicateRetry
+          ? STEP_SOURCE.DUPLICATE_RETRY
+          : STEP_SOURCE.AI,
+        sourceReason: pendingDuplicateRetry
+          ? "Regenerated after duplicate-step phase confirmation."
+          : "Generated after duplicate-step confirmation."
+      });
+    } catch (error) {
+      applyFallbackStep(taskInput, error, stepHistory);
+    }
   }
 
   function regenerateAfterDuplicateStep({
@@ -1715,44 +2141,18 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
   }
 
   function applyFallbackStep(taskTitle, error, historyForCompare = stepHistory) {
-    const fallbackErrorMessage = error?.message
-      ? `已启用备用步骤：${error.message}`
-      : "已启用备用步骤：AI 生成失败或超时。";
+    const fallbackErrorMessage = getReadableFallbackMessage(error);
 
     updateCurrentTask({
       currentStep: withStepSource(
         getNonDuplicateFallbackStep(taskTitle, historyForCompare),
         STEP_SOURCE.GENERIC_FALLBACK,
-        error?.message
-          ? `生成失败后启用通用备用步骤：${error.message}`
-          : "生成失败后启用通用备用步骤。"
+        "生成没有顺利完成时启用通用备用步骤。"
       ),
       status: APP_STATUS.READY,
       generationSource: GENERATION_SOURCE.FALLBACK,
-      sessionSummary: "AI 生成失败或超时，系统已启用备用步骤。",
+      sessionSummary: "生成没有顺利完成，已切换到可执行的备用动作。",
       errorMessage: fallbackErrorMessage,
-      reEntryPoint: null,
-      resistancePanelOpen: false,
-      selectedResistanceType: "",
-      resistanceFeedback: "",
-      interruptedStep: "",
-      resistanceDiagnosis: null,
-      resistanceResolution: null
-    });
-    clearSavedReEntryPoint();
-  }
-
-  function applyDuplicateFallbackStep(
-    taskTitle,
-    historyForCompare = stepHistory,
-    reason = "AI 生成了重复步骤。"
-  ) {
-    updateCurrentTask({
-      currentStep: getDuplicateFallbackStep(taskTitle, historyForCompare, reason),
-      status: APP_STATUS.READY,
-      generationSource: GENERATION_SOURCE.FALLBACK,
-      sessionSummary: "AI 生成了重复步骤，系统已改用本地备用步骤。",
-      errorMessage: `已启用备用步骤：${reason}`,
       reEntryPoint: null,
       resistancePanelOpen: false,
       selectedResistanceType: "",
@@ -1983,6 +2383,14 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
   }
 
   function handleReset() {
+    if (
+      appStatus === APP_STATUS.COMPLETED ||
+      appStatus === APP_STATUS.EXITED
+    ) {
+      onStartNewTask();
+      return;
+    }
+
     updateCurrentTask({
       title: "",
       currentStep: "",
@@ -2017,8 +2425,12 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
               type="button"
               onClick={onBack}
             >
-              &lt;
+              <ArrowLeft aria-hidden="true" className="icon-button-svg" size={22} />
             </button>
+            <StatusPill
+              className="header-status-pill"
+              status={task.errorMessage ? "error" : appStatus}
+            />
           </div>
         </div>
       </header>
@@ -2044,14 +2456,15 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
                 id="task-input"
                 value={taskInput}
                 onChange={handleTitleChange}
-                placeholder="输入想推进的任务"
+                placeholder="例如：写作品集项目介绍 / 回老师消息 / 整理论文选题"
                 disabled={isTaskLocked}
               />
               <button
-                className="secondary-action"
+                className="primary-action"
                 type="submit"
                 disabled={isTaskLocked}
               >
+                <Sparkles aria-hidden="true" className="button-icon" size={18} />
                 生成第一步
               </button>
             </form>
@@ -2059,8 +2472,13 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
             <div className="task-summary" aria-live="polite">
               <div className="task-summary-main">
                 <span
-                  className={`task-summary-dot task-summary-dot--${statusMeta.tone}`}
-                />
+                  aria-hidden="true"
+                  className={`task-summary-icon task-summary-icon--${
+                    task.errorMessage ? "error" : statusMeta.tone
+                  }`}
+                >
+                  {getTaskStatusIcon(appStatus, Boolean(task.errorMessage))}
+                </span>
                 <div>
                   <p className="task-summary-label">{taskPanelCopy.summary}</p>
                   <p className="task-summary-text">
@@ -2068,65 +2486,70 @@ function TaskExecutionPage({ task, onBack, onUpdateTask }) {
                   </p>
                 </div>
               </div>
-              <span className="autosave-note">自动保存</span>
+              <div className="task-summary-statuses" aria-label="保存状态">
+                <span className="autosave-note">自动保存</span>
+              </div>
             </div>
           )}
         </section>
 
-        {appStatus !== APP_STATUS.COMPLETED && (
-          <StepCard
-            appStatus={appStatus}
-            currentStep={currentStep}
-            currentStepNumber={currentStepNumber}
-            loadingMessage={loadingMessage}
-            generationSource={task.generationSource}
-            isUsingFallback={isUsingFallback}
-            reEntryPoint={task.reEntryPoint}
-            resistancePanelOpen={task.resistancePanelOpen}
-            resistanceResult={resistanceResult}
-            isResolvingResistance={isResolvingResistance}
-            resistanceLoadingMessage={resistanceLoadingMessage}
-            sessionSummary={task.sessionSummary}
-            errorMessage={task.errorMessage}
-            statusMeta={statusMeta}
-            onStartExecuting={handleStartExecuting}
-            onResumeCurrentStep={handleResumeCurrentStep}
-            onCompleteCurrentStep={handleCompleteCurrentStep}
-            onConfirmSimpleTaskComplete={handleConfirmSimpleTaskComplete}
-            onRequestSimpleTaskFinalStep={handleRequestCompletionContinuation}
-            onSubmitClarificationAnswer={handleSubmitClarificationAnswer}
-            onToggleResistancePanel={toggleResistancePanel}
-            onResistanceSelect={handleResistanceSelect}
-            onResistanceTextSubmit={handleResistanceTextSubmit}
-            onExit={onBack}
-            onReset={handleReset}
-          />
-        )}
+        <StepCard
+          appStatus={appStatus}
+          currentStep={currentStep}
+          currentStepNumber={currentStepNumber}
+          loadingMessage={loadingMessage}
+          generationSource={task.generationSource}
+          isUsingFallback={isUsingFallback}
+          reEntryPoint={task.reEntryPoint}
+          resistancePanelOpen={task.resistancePanelOpen}
+          resistanceResult={resistanceResult}
+          isResolvingResistance={isResolvingResistance}
+          resistanceLoadingMessage={resistanceLoadingMessage}
+          sessionSummary={task.sessionSummary}
+          errorMessage={task.errorMessage}
+          onStartExecuting={handleStartExecuting}
+          onResumeCurrentStep={handleResumeCurrentStep}
+          onCompleteCurrentStep={handleCompleteCurrentStep}
+          onConfirmSimpleTaskComplete={handleConfirmSimpleTaskComplete}
+          onRequestSimpleTaskFinalStep={handleRequestCompletionContinuation}
+          onSubmitClarificationAnswer={handleSubmitClarificationAnswer}
+          onToggleResistancePanel={toggleResistancePanel}
+          onResistanceSelect={handleResistanceSelect}
+          onResistanceTextSubmit={handleResistanceTextSubmit}
+          onExit={onBack}
+          onReset={handleReset}
+        />
 
-        <section
-          className="surface-card progress-panel"
-          aria-labelledby="progress-title"
-        >
-          <div className="section-heading">
-            <p className="section-kicker">进度记录</p>
-            <h2 id="progress-title">当前进度</h2>
-          </div>
+        <section className="progress-panel" aria-labelledby="progress-title">
+          <button
+            aria-controls="progress-history"
+            aria-expanded={progressOpen}
+            className="progress-summary"
+            disabled={stepHistory.length === 0}
+            type="button"
+            onClick={() => setProgressOpen((isOpen) => !isOpen)}
+          >
+            <span className="progress-summary-main">
+              <span className="progress-kicker-row">
+                <History aria-hidden="true" className="heading-icon" size={16} />
+                <span className="section-kicker">进度记录</span>
+              </span>
+              <strong id="progress-title">已完成 {stepHistory.length} 步</strong>
+            </span>
+            <span className="progress-summary-meta">
+              {stepHistory.length === 0 ? "暂无记录" : "查看记录"}
+              <ChevronRight
+                aria-hidden="true"
+                className={`progress-chevron${
+                  progressOpen ? " progress-chevron--open" : ""
+                }`}
+                size={18}
+              />
+            </span>
+          </button>
 
-          <div className="progress-metrics">
-            <div>
-              <span className="metric-label">当前步骤</span>
-              <strong>第 {currentStepNumber} 步</strong>
-            </div>
-            <div>
-              <span className="metric-label">已完成</span>
-              <strong>{stepHistory.length} 步</strong>
-            </div>
-          </div>
-
-          {stepHistory.length === 0 ? (
-            <p className="empty-state">暂无记录</p>
-          ) : (
-            <ol className="timeline">
+          {progressOpen && stepHistory.length > 0 && (
+            <ol className="timeline timeline--compact" id="progress-history">
               {stepHistory.map((step, index) => (
                 <li key={`${getStepText(step)}-${index}`}>
                   <span>{index + 1}</span>
@@ -2812,16 +3235,11 @@ function getTaskListDetail(task) {
   };
 }
 
-function getTaskStatusIcon(status) {
-  if (status === APP_STATUS.COMPLETED) {
-    return "✓";
-  }
+function getTaskStatusIcon(status, hasError = false) {
+  const meta = getStatusPillMeta(hasError ? "error" : status);
+  const Icon = meta.icon;
 
-  if (status === APP_STATUS.IDLE || status === APP_STATUS.EXITED) {
-    return "○";
-  }
-
-  return "○";
+  return <Icon size={16} strokeWidth={2.4} />;
 }
 
 function getSafeDisplayText(value, fallback = "") {
@@ -2965,7 +3383,8 @@ function normalizeCurrentStep(value, options = {}) {
   const taskType = options.taskType || getTaskType(taskTitle || stepText);
   const stepType =
     rawStep.step_type === "clarification" ||
-    rawStep.step_type === "completion_confirmation"
+    rawStep.step_type === "completion_confirmation" ||
+    rawStep.step_type === "closing_checklist"
       ? rawStep.step_type
       : "action";
   const actionType =
@@ -3055,6 +3474,22 @@ function normalizeCurrentStep(value, options = {}) {
         previousStep: getStepText(rawStep.pending_duplicate_retry.previousStep)
       };
     }
+  }
+
+  if (stepType === "closing_checklist") {
+    normalizedStep.closing_checklist_title = String(
+      rawStep.closing_checklist_title || ""
+    ).trim();
+    normalizedStep.closing_checklist_items = Array.isArray(
+      rawStep.closing_checklist_items
+    )
+      ? rawStep.closing_checklist_items
+          .map((item) => String(item || "").trim())
+          .filter(Boolean)
+      : [];
+    normalizedStep.closing_followup_text = String(
+      rawStep.closing_followup_text || ""
+    ).trim();
   }
 
   [
@@ -3956,7 +4391,7 @@ function getDiagnosisFeedback(diagnosis) {
     social_pressure: "已先改成不发送的低风险开场白。",
     perfectionism: "已改成低质量草稿入口，不要求写好。",
     physical_low_energy: "已改成低身体成本的 30 秒入口。",
-    value_uncertainty: "已暂停强推执行，先做最小价值确认。"
+    value_uncertainty: "已停止强推执行，先做最小价值确认。"
   };
 
   return feedbackMap[diagnosis.root_cause] || "已生成更容易继续的备用步骤。";
@@ -4102,35 +4537,6 @@ function getNonDuplicateFallbackStep(taskTitle, history = []) {
       taskTitle,
       taskType,
       stage: "clarify"
-    }
-  );
-}
-
-function getDuplicateFallbackStep(taskTitle, history = [], reason = "") {
-  const taskType = getTaskType(taskTitle);
-
-  return normalizeCurrentStep(
-    {
-      step_type: "action",
-      step_text:
-        "做一个防重复检查点：写下一个和已完成步骤不同的具体动作。",
-      action_type: "write",
-      completion_criteria:
-        "写出一个没有出现在已完成步骤里的具体下一步动作。",
-      estimated_effort: "low",
-      stage: "clarify",
-      risk_flags: ["unclear_output"],
-      task_object: "next_distinct_action",
-      expected_output: "1 distinct next action",
-      progress_intent: "confirm_next_distinct_action"
-    },
-    {
-      taskTitle,
-      taskType,
-      stage: "clarify",
-      source: STEP_SOURCE.DUPLICATE_FALLBACK,
-      sourceReason:
-        reason || "重复步骤重试后，已改用本地备用步骤。"
     }
   );
 }
@@ -4633,140 +5039,6 @@ function createReEntryPoint(task, currentStep, stepHistory) {
   };
 }
 
-function shouldCompleteTask(task, stepHistory, justCompletedStep = "") {
-  if (hasExplicitTaskCompletionSignal(justCompletedStep)) {
-    return true;
-  }
-
-  const taskType = getTaskType(task);
-
-  if (taskType !== TASK_TYPES.TASK_PROCESSING) {
-    return false;
-  }
-
-  const taskSubtype = getTaskSubtype(task, taskType);
-  const completedText = normalizeText(
-    stepHistory.map((step) => getStepText(step)).join(" ")
-  );
-
-  if (taskSubtype === TASK_SUBTYPES.REPLY_MESSAGE) {
-    return hasAnyKeyword(completedText, [
-      "已回复",
-      "回复了",
-      "发送回复",
-      "发出回复",
-      "消息已发"
-    ]);
-  }
-
-  if (taskSubtype === TASK_SUBTYPES.SEND_EMAIL) {
-    return hasAnyKeyword(completedText, [
-      "已发送",
-      "发送邮件",
-      "点击发送",
-      "点击发出",
-      "发出邮件",
-      "邮件已发"
-    ]);
-  }
-
-  if (taskSubtype === TASK_SUBTYPES.SUBMIT_APPLICATION) {
-    return hasAnyKeyword(completedText, [
-      "已提交",
-      "提交申请",
-      "已投递",
-      "投递简历",
-      "发送简历",
-      "简历已发"
-    ]);
-  }
-
-  return hasAnyKeyword(completedText, [
-    "已发送",
-    "已回复",
-    "已提交",
-    "提交成功",
-    "已投递",
-    "投递成功",
-    "已发布",
-    "发布成功",
-    "已交付",
-    "交付完成",
-    "已付款",
-    "付款完成",
-    "已下单",
-    "下单完成",
-    "预约成功",
-    "报名成功",
-    "办理完成"
-  ]);
-}
-
-function hasExplicitTaskCompletionSignal(step) {
-  const stepText = getStepText(step);
-  const text = normalizeText(
-    `${stepText} ${step?.completion_criteria || ""}`
-  );
-
-  if (!stepText) {
-    return false;
-  }
-
-  const executionText = stripNegatedFinalActions(text);
-
-  return hasAnyKeyword(executionText, [
-    "最后一步",
-    "最终",
-    "完成任务",
-    "任务完成",
-    "提交成功",
-    "提交",
-    "发送",
-    "发出",
-    "发布",
-    "发布成功",
-    "结束",
-    "交付完成",
-    "已付款",
-    "付款完成",
-    "已完成付款",
-    "已下单",
-    "下单完成",
-    "预约成功",
-    "报名成功",
-    "办理完成",
-    "邮件已发",
-    "消息已发",
-    "申请已提交",
-    "简历已投递",
-    "订单已完成",
-    "报名已成功",
-    "预约已成功"
-  ]);
-}
-
-function stripNegatedFinalActions(text) {
-  const safePhrases = [
-    "不需要发送",
-    "不发送",
-    "不要发送",
-    "先不要发送",
-    "不需要提交",
-    "不提交",
-    "不要提交",
-    "不发布",
-    "不要发布",
-    "不需要发布",
-    "不发出",
-    "不要发出"
-  ];
-
-  return safePhrases.reduce(
-    (currentText, phrase) => currentText.replaceAll(phrase, ""),
-    text
-  );
-}
-
 function readSavedReEntryPoint() {
   if (typeof window === "undefined") {
     return null;
@@ -4837,38 +5109,7 @@ function hasAnyKeyword(text, keywords) {
 }
 
 function getStatusMeta(status) {
-  const statusMap = {
-    idle: {
-      label: "待输入",
-      tone: "neutral"
-    },
-    loading: {
-      label: "生成中",
-      tone: "active"
-    },
-    ready: {
-      label: "可执行",
-      tone: "active"
-    },
-    executing: {
-      label: "执行中",
-      tone: "active"
-    },
-    paused: {
-      label: "已暂停",
-      tone: "warning"
-    },
-    exited: {
-      label: "已退出",
-      tone: "neutral"
-    },
-    completed: {
-      label: "已完成",
-      tone: "success"
-    }
-  };
-
-  return statusMap[status] || statusMap.idle;
+  return getStatusPillMeta(status);
 }
 
 function getTaskPanelCopy(status) {
@@ -4900,7 +5141,7 @@ function getTaskPanelCopy(status) {
     paused: {
       kicker: "任务上下文",
       title: "已保留入口",
-      summary: "暂停中的任务",
+      summary: "恢复入口",
       action: "返回我的任务"
     },
     exited: {

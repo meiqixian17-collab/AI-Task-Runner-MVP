@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
+  BatteryLow,
+  Brain,
   CheckCircle2,
   CircleAlert,
+  CircleSlash,
+  Minimize2,
   Play,
   RefreshCw,
   SendHorizontal,
@@ -12,19 +16,23 @@ import {
 const RESISTANCE_OPTIONS = [
   {
     type: "tooHard",
-    label: "这一步太难了"
+    label: "这一步太难了",
+    icon: Minimize2
   },
   {
     type: "dontWant",
-    label: "我就是不想做"
+    label: "我就是不想做",
+    icon: CircleSlash
   },
   {
     type: "unsure",
-    label: "我不确定还要不要继续"
+    label: "我不确定还要不要继续",
+    icon: Brain
   },
   {
     type: "notReady",
-    label: "我现在状态不适合做"
+    label: "我现在状态不适合做",
+    icon: BatteryLow
   }
 ];
 
@@ -97,8 +105,11 @@ function StepCard({
   const [clarificationIsMultiline, setClarificationIsMultiline] =
     useState(false);
   const [resistanceIsMultiline, setResistanceIsMultiline] = useState(false);
+  const [isCompletionFlashActive, setIsCompletionFlashActive] =
+    useState(false);
   const clarificationTextareaRef = useRef(null);
   const resistanceTextareaRef = useRef(null);
+  const completionFlashTimeoutRef = useRef(null);
   const currentStepText = getStepText(currentStep);
   const isClarificationStep =
     currentStep &&
@@ -156,6 +167,31 @@ function StepCard({
   const canSubmitResistanceText =
     resistanceText.trim().length > 0 && !isResolvingResistance;
   const canSubmitClarification = clarificationAnswer.trim().length > 0;
+  const isGeneratingMotionActive =
+    (appStatus === "loading" || isResolvingResistance) &&
+    !isCompletionFlashActive;
+  const stepType =
+    currentStep && typeof currentStep === "object"
+      ? currentStep.step_type || "default"
+      : "default";
+  const stepContentMotionKey = [
+    appStatus,
+    currentStepNumber,
+    currentStepText,
+    stepType,
+    isResolvingResistance ? "resolving" : "steady",
+    errorMessage ? "error" : "clean"
+  ].join("|");
+  const stepCardClassName = [
+    "surface-card",
+    "step-card",
+    "priority-card",
+    `step-card--${appStatus}`,
+    isGeneratingMotionActive ? "step-card--generating" : "",
+    isCompletionFlashActive ? "step-card--complete-flash" : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   useEffect(() => {
     setClarificationAnswer("");
@@ -228,6 +264,14 @@ function StepCard({
     textarea.style.overflowY = measuredHeight > maximumHeight ? "auto" : "hidden";
   }, [resistanceText, resistancePanelOpen]);
 
+  useEffect(() => {
+    return () => {
+      if (completionFlashTimeoutRef.current) {
+        window.clearTimeout(completionFlashTimeoutRef.current);
+      }
+    };
+  }, []);
+
   function handleResistanceTextSubmit(event) {
     event.preventDefault();
 
@@ -252,9 +296,24 @@ function StepCard({
     setClarificationError("");
   }
 
+  function handleCompleteCurrentStepClick() {
+    setIsCompletionFlashActive(true);
+
+    if (completionFlashTimeoutRef.current) {
+      window.clearTimeout(completionFlashTimeoutRef.current);
+    }
+
+    completionFlashTimeoutRef.current = window.setTimeout(() => {
+      setIsCompletionFlashActive(false);
+      completionFlashTimeoutRef.current = null;
+    }, 320);
+
+    onCompleteCurrentStep();
+  }
+
   return (
     <section
-      className={`surface-card step-card priority-card step-card--${appStatus}`}
+      className={stepCardClassName}
       aria-labelledby="step-card-title"
     >
       <div className="step-card-header">
@@ -283,6 +342,7 @@ function StepCard({
         </div>
       </div>
 
+      <div key={stepContentMotionKey} className="step-card-motion-content">
       {appStatus === "idle" && (
         <div className="empty-action-panel">
           <p>把任务写在上方，生成后这里会出现当前只做的一步。</p>
@@ -434,7 +494,12 @@ function StepCard({
 
           {appStatus === "executing" && (
         <div className="execution-area">
-          <button className="primary-action" onClick={onCompleteCurrentStep}>
+          <button
+            className={`primary-action${
+              isCompletionFlashActive ? " primary-action--complete-flash" : ""
+            }`}
+            onClick={handleCompleteCurrentStepClick}
+          >
             <CheckCircle2 aria-hidden="true" className="button-icon" size={18} />
             完成当前步骤
           </button>
@@ -452,23 +517,37 @@ function StepCard({
 
             {resistancePanelOpen && (
               <div className="resistance-panel">
-                <p className="resistance-title">选一个最接近的卡点</p>
+                <p className="resistance-title">是什么让你卡住了？</p>
 
                 <div className="resistance-options">
-                  {RESISTANCE_OPTIONS.map((option) => (
-                    <button
-                      className="resistance-option"
-                      disabled={isResolvingResistance}
-                      key={option.type}
-                      onClick={() => onResistanceSelect(option.type)}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
+                  {RESISTANCE_OPTIONS.map((option) => {
+                    const ResistanceIcon = option.icon;
+
+                    return (
+                      <button
+                        className="resistance-option"
+                        disabled={isResolvingResistance}
+                        key={option.type}
+                        type="button"
+                        onClick={() => onResistanceSelect(option.type)}
+                      >
+                        <span className="resistance-option-icon">
+                          <ResistanceIcon
+                            aria-hidden="true"
+                            className="icon-button-svg"
+                            size={18}
+                          />
+                        </span>
+                        <span className="resistance-option-label">
+                          {option.label}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
 
                 <div className="resistance-text-entry">
-                  <label htmlFor="resistance-text">也可以补充一句</label>
+                  <label htmlFor="resistance-text">想补一句也可以</label>
                   <form
                     className={`resistance-input-row${
                       resistanceIsMultiline
@@ -485,7 +564,7 @@ function StepCard({
                       onChange={(event) =>
                         setResistanceText(event.target.value)
                       }
-                      placeholder="比如：怕写得不好 / 不知道从哪开始"
+                      placeholder="比如：怕写不好"
                       rows={1}
                     />
                     <button
@@ -568,6 +647,7 @@ function StepCard({
           {errorMessage}
         </p>
       )}
+      </div>
     </section>
   );
 }
