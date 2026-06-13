@@ -25,14 +25,14 @@ const firstDuplicateDecision = getDuplicateStepDecision({
 });
 
 assertEqual(
-  "first duplicate retries instead of falling back",
+  "first normal duplicate asks for completion confirmation",
   firstDuplicateDecision.action,
-  "retry"
+  "confirm_completion"
 );
 assertEqual(
-  "first retry attempt is counted as 1",
-  firstDuplicateDecision.nextDuplicateRetryCount,
-  1
+  "first duplicate keeps retry count unchanged",
+  firstDuplicateDecision.duplicateRetryCount,
+  0
 );
 
 const secondDuplicateStep = makeStep(
@@ -45,7 +45,7 @@ const secondDuplicateDecision = getDuplicateStepDecision({
   nextStep: secondDuplicateStep,
   historyForCompare: history,
   taskTitle: "Draft report",
-  duplicateRetryCount: firstDuplicateDecision.nextDuplicateRetryCount,
+  duplicateRetryCount: 1,
   rejectedSteps: firstDuplicateDecision.rejectedSteps,
   isDuplicateStep: () => true,
   shouldAskSimpleTaskCompletion: () => false,
@@ -53,9 +53,9 @@ const secondDuplicateDecision = getDuplicateStepDecision({
 });
 
 assertEqual(
-  "second duplicate still retries when under max",
+  "second duplicate still asks for completion confirmation",
   secondDuplicateDecision.action,
-  "retry"
+  "confirm_completion"
 );
 assertDeepEqual(
   "second retry carries both failed candidates",
@@ -75,9 +75,9 @@ const maxedDuplicateDecision = getDuplicateStepDecision({
 });
 
 assertEqual(
-  "max duplicate retry count falls back",
+  "max duplicate retry count still asks for completion confirmation",
   maxedDuplicateDecision.action,
-  "fallback"
+  "confirm_completion"
 );
 
 const longHistory = ["step 1", "step 2", "step 3", "step 4", "step 5", "step 6"];

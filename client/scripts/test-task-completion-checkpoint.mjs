@@ -1,7 +1,7 @@
 import {
   COMPLETION_CONFIRMATION_TYPES,
-  NORMAL_TASK_COMPLETION_CHECK_STEP_COUNT,
   createNormalTaskCompletionCheckpointStep,
+  createTaskCompletionConfirmationStep,
   shouldAskNormalTaskCompletionCheckpoint,
   shouldAskNormalTaskDuplicateCheckpoint,
   shouldContinueCompletionConfirmationWithAi
@@ -10,78 +10,57 @@ import {
 const failures = [];
 
 const normalHistory = Array.from(
-  { length: NORMAL_TASK_COMPLETION_CHECK_STEP_COUNT },
+  { length: 6 },
   (_, index) => `completed step ${index + 1}`
 );
 
 assertTrue(
-  "normal task shows checkpoint after five completed steps",
-  shouldAskNormalTaskCompletionCheckpoint({
+  "normal task no longer shows checkpoint only because five steps passed",
+  !shouldAskNormalTaskCompletionCheckpoint({
     taskTitle: "Draft project report",
     stepHistory: normalHistory
   })
 );
 
 assertTrue(
-  "normal task checkpoint is not shown at same dismissed step count",
-  !shouldAskNormalTaskCompletionCheckpoint({
+  "normal duplicate checkpoint is disabled as a step-count gate",
+  !shouldAskNormalTaskDuplicateCheckpoint({
     taskTitle: "Draft project report",
-    stepHistory: normalHistory,
-    completionCheckpointDismissedAtStepCount: normalHistory.length
+    stepHistory: normalHistory
   })
 );
 
-assertTrue(
-  "normal task checkpoint can show again after one more completed step",
-  shouldAskNormalTaskCompletionCheckpoint({
-    taskTitle: "Draft project report",
-    stepHistory: [...normalHistory, "completed step 6"],
-    completionCheckpointDismissedAtStepCount: normalHistory.length
-  })
-);
-
-const checkpointStep = createNormalTaskCompletionCheckpointStep(
+const taskCompletionStep = createTaskCompletionConfirmationStep(
   "Draft project report"
 );
 
 assertEqual(
-  "normal checkpoint has completion confirmation type",
-  checkpointStep.completion_confirmation_type,
+  "task completion prompt has task completion type",
+  taskCompletionStep.completion_confirmation_type,
+  COMPLETION_CONFIRMATION_TYPES.TASK_COMPLETION
+);
+assertEqual(
+  "task completion prompt is scoped to task",
+  taskCompletionStep.completion_scope,
+  "task"
+);
+assertTrue(
+  "task completion prompt does not continue with AI by default",
+  !shouldContinueCompletionConfirmationWithAi(taskCompletionStep)
+);
+
+const legacyNormalStep = createNormalTaskCompletionCheckpointStep(
+  "Draft project report"
+);
+
+assertEqual(
+  "legacy normal checkpoint keeps its type for compatibility",
+  legacyNormalStep.completion_confirmation_type,
   COMPLETION_CONFIRMATION_TYPES.NORMAL_TASK_CHECKPOINT
 );
 assertTrue(
-  "normal checkpoint continue path asks AI for the next step",
-  shouldContinueCompletionConfirmationWithAi(checkpointStep)
-);
-
-assertTrue(
-  "already completed button can complete normal checkpoint",
-  checkpointStep.step_type === "completion_confirmation"
-);
-
-assertTrue(
-  "early duplicate normal task does not ask for completion before threshold",
-  !shouldAskNormalTaskDuplicateCheckpoint({
-    taskTitle: "Draft project report",
-    stepHistory: ["Open the document"]
-  })
-);
-
-assertTrue(
-  "duplicate normal task can ask for completion after threshold",
-  shouldAskNormalTaskDuplicateCheckpoint({
-    taskTitle: "Draft project report",
-    stepHistory: normalHistory
-  })
-);
-
-assertTrue(
-  "duplicate checkpoint does not immediately reappear after dismissal",
-  !shouldAskNormalTaskDuplicateCheckpoint({
-    taskTitle: "Draft project report",
-    stepHistory: normalHistory,
-    completionCheckpointDismissedAtStepCount: normalHistory.length
-  })
+  "legacy normal checkpoint can still use AI continuation",
+  shouldContinueCompletionConfirmationWithAi(legacyNormalStep)
 );
 
 if (failures.length > 0) {

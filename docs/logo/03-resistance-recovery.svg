@@ -1,0 +1,9 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AI Task Runner resistance recovery mark">
+  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M25 58 C35 38 50 38 55 50 C58 58 51 64 43 59" stroke-width="4"/>
+    <path d="M54 50 C63 35 76 35 78 48 C80 62 66 69 55 61" stroke-width="4" opacity=".45"/>
+    <path d="M44 70 C52 60 61 57 73 61" stroke-width="3"/>
+  </g>
+  <circle cx="44" cy="70" r="4.5" fill="currentColor"/>
+  <circle cx="73" cy="61" r="4.5" fill="currentColor"/>
+</svg>

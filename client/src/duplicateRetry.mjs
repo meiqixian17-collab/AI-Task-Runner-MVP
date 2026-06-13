@@ -49,17 +49,8 @@ export function getDuplicateStepDecision({
     getStepText
   );
 
-  if (history.length > 0 && retryCount < MAX_DUPLICATE_RETRY_COUNT) {
-    return {
-      action: "retry",
-      duplicateRetryCount: retryCount,
-      nextDuplicateRetryCount: retryCount + 1,
-      rejectedSteps: nextRejectedSteps
-    };
-  }
-
   return {
-    action: "fallback",
+    action: "confirm_completion",
     duplicateRetryCount: retryCount,
     rejectedSteps: nextRejectedSteps
   };

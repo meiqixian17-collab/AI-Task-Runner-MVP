@@ -223,10 +223,6 @@ button:disabled {
 }
 
 .create-task-button {
-  position: fixed;
-  top: 29px;
-  right: 24px;
-  z-index: 10;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -276,6 +272,7 @@ button:disabled {
 
 .page--execution .title-row {
   min-height: 36px;
+  justify-content: space-between;
 }
 
 .page--execution .back-icon-button {
@@ -1630,8 +1627,8 @@ h2 {
 }
 
 .result-state--success {
-  border-color: var(--accent-success);
-  background: var(--surface-success);
+  border: 0;
+  background: rgba(255, 250, 240, 0.56);
 }
 
 .inline-error {
@@ -1903,6 +1900,248 @@ h2 {
   }
 }
 
+.flow-demo-v2 {
+  width: 100vw;
+  min-width: 0;
+  min-height: 100vh;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 10%, #fffaf0 0, #fafaf5 44%, #f2eadf 100%);
+  cursor: none;
+}
+
+.flow-demo-v2 *,
+.flow-demo-v2 button,
+.flow-demo-v2 textarea {
+  cursor: none;
+}
+
+.flow-demo-v2-shell {
+  display: grid;
+  width: 860px;
+  margin: 0 auto;
+  padding: 46px 0 40px;
+  gap: 12px;
+}
+
+.flow-demo-v2-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 54px;
+}
+
+.flow-demo-v2-header h1 {
+  margin-top: 0;
+  font-size: 24px;
+  line-height: 32px;
+}
+
+.flow-demo-v2-task {
+  padding: 18px 20px;
+}
+
+.flow-demo-v2-task .task-form textarea {
+  min-height: 112px;
+  resize: none;
+}
+
+.flow-demo-v2-task .primary-action,
+.flow-demo-v2-step-main .primary-action {
+  justify-self: start;
+  min-width: 180px;
+}
+
+.flow-demo-v2-task--compact {
+  padding: 14px 18px;
+}
+
+.flow-demo-v2-task-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.flow-demo-v2-task-summary strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 17px;
+  line-height: 26px;
+}
+
+.flow-demo-v2-task-summary > span {
+  color: var(--text-disabled);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.flow-demo-v2-progress {
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  background: rgba(255, 253, 248, 0.78);
+  box-shadow: var(--shadow-subtle);
+}
+
+.flow-demo-v2-progress .progress-summary {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.flow-demo-v2-progress .timeline {
+  margin: 0 16px 14px;
+}
+
+.flow-demo-v2-step-card {
+  position: relative;
+  min-height: 320px;
+  overflow: hidden;
+  border: 1px solid rgba(226, 185, 118, 0.52);
+  border-radius: var(--radius-step-card);
+  background: var(--surface-step-card);
+  box-shadow: var(--shadow-step-card);
+  padding: 24px;
+}
+
+.flow-demo-v2-step-card--firstLoading,
+.flow-demo-v2-step-card--nextLoading {
+  animation: step-card-breathe 2.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.flow-demo-v2-step-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.flow-demo-v2-empty-step,
+.flow-demo-v2-loading {
+  display: grid;
+  min-height: 190px;
+  align-content: center;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+
+.flow-demo-v2-empty-step h2 {
+  color: var(--text-primary);
+}
+
+.flow-demo-v2-loading {
+  justify-items: center;
+}
+
+.flow-demo-v2-loading-bar {
+  position: relative;
+  width: min(380px, 100%);
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--surface-loading-track);
+}
+
+.flow-demo-v2-loading-bar::before {
+  position: absolute;
+  inset: 0;
+  width: 42%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(170, 97, 22, 0), var(--brand-primary));
+  content: "";
+  animation: loading-slide 940ms cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.flow-demo-v2-step-main {
+  display: grid;
+  gap: 12px;
+  animation: step-content-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.flow-demo-v2-step-meta {
+  display: flex;
+  gap: 8px;
+  color: var(--brand-ai-text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.flow-demo-v2-step-main h2 {
+  font-size: 22px;
+  line-height: 30px;
+}
+
+.flow-demo-v2-step-text {
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 30px;
+}
+
+.flow-demo-v2-criteria {
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.flow-demo-v2-pointer-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.flow-demo-v2-cursor {
+  position: fixed;
+  width: 24px;
+  height: 34px;
+  filter: drop-shadow(0 5px 10px rgba(36, 27, 18, 0.3));
+  transform: translate(-3px, -3px) scale(1);
+  transition: transform 90ms ease;
+}
+
+.flow-demo-v2-cursor::before {
+  position: absolute;
+  inset: 0;
+  background: #fffdf8;
+  clip-path: polygon(8% 0, 100% 58%, 57% 61%, 38% 100%, 24% 94%, 42% 58%, 8% 58%);
+  content: "";
+}
+
+.flow-demo-v2-cursor::after {
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--text-primary);
+  clip-path: polygon(8% 0, 100% 58%, 57% 61%, 38% 100%, 24% 94%, 42% 58%, 8% 58%);
+  content: "";
+}
+
+.flow-demo-v2-cursor--pressed {
+  transform: translate(-3px, -3px) scale(0.9);
+}
+
+.flow-demo-v2-click-ripple {
+  position: fixed;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border: 3px solid rgba(170, 97, 22, 0.48);
+  border-radius: var(--radius-pill);
+  animation: flow-demo-v2-ripple 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes flow-demo-v2-ripple {
+  from {
+    opacity: 0.88;
+    transform: scale(0.4);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(6);
+  }
+}
+
 @media (max-width: 760px) {
   .page {
     padding: var(--space-xl) var(--space-lg) 28px;
@@ -1983,8 +2222,7 @@ h2 {
   }
 
   .create-task-button {
-    top: 29px;
-    right: 16px;
+    flex: 0 0 auto;
   }
 
   .execution-header {

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowLeft,
   CheckCircle2,
   ChevronRight,
+  ChevronLeft,
   History,
   MoreVertical,
   Plus,
@@ -2425,7 +2425,7 @@ function TaskExecutionPage({ task, onBack, onStartNewTask, onUpdateTask }) {
               type="button"
               onClick={onBack}
             >
-              <ArrowLeft aria-hidden="true" className="icon-button-svg" size={22} />
+              <ChevronLeft aria-hidden="true" className="icon-button-svg" size={24} />
             </button>
             <StatusPill
               className="header-status-pill"

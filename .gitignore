@@ -12,5 +12,8 @@ dist/
 *.err.log
 *.out.log
 
+.tmp*/
+video/out/
+
 .DS_Store
 Thumbs.db

@@ -1,7 +1,15 @@
 {
   "name": "AI Task Runner UI Importer",
-  "id": "ai-task-runner-ui-importer",
   "api": "1.0.0",
   "main": "code.js",
-  "editorType": ["figma"]
+  "capabilities": [],
+  "enableProposedApi": false,
+  "editorType": ["figma"],
+  "menu": [
+    { "name": "1. Generate list states", "command": "list-states" },
+    { "name": "2. Generate execution states A", "command": "execution-a" },
+    { "name": "3. Generate execution states B", "command": "execution-b" },
+    { "name": "4. Generate tokens and components", "command": "design-system" },
+    { "name": "Generate all states", "command": "all" }
+  ]
 }

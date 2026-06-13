@@ -1,0 +1,20 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AI Task Runner step card grid mark">
+  <defs>
+    <clipPath id="card-clip">
+      <rect x="24" y="22" width="52" height="56" rx="14"/>
+    </clipPath>
+  </defs>
+  <rect x="24" y="22" width="52" height="56" rx="14" fill="none" stroke="currentColor" stroke-width="3"/>
+  <g clip-path="url(#card-clip)" fill="currentColor">
+    <circle cx="38" cy="36" r="3"/>
+    <circle cx="50" cy="36" r="3"/>
+    <circle cx="62" cy="36" r="3"/>
+    <circle cx="38" cy="48" r="3"/>
+    <circle cx="50" cy="48" r="3"/>
+    <circle cx="38" cy="60" r="3"/>
+    <circle cx="50" cy="60" r="3"/>
+    <circle cx="62" cy="60" r="3"/>
+    <circle cx="62" cy="48" r="5"/>
+  </g>
+  <path d="M57 48 H67" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+</svg>
