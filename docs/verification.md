@@ -40,6 +40,6 @@ git ls-files
 
 结果：
 
-- `server/.env`、日志、`node_modules/`、`client/dist/`、`.tmp*/` 和 `video/out/` 均处于 ignored 状态。
-- `git ls-files` 中没有真实 `.env`、日志、`node_modules/`、`dist/`、`.tmp*/` 或 `video/out/`。
+- `server/.env`、日志、`node_modules/`、`client/dist/`、`.tmp*/`、`docs/portfolio/`、`figma-import/` 和 `video/` 均处于 ignored 状态。
+- 发布到 GitHub 的干净历史中没有真实 `.env`、日志、`node_modules/`、`dist/`、`.tmp*/`、`docs/portfolio/`、`figma-import/` 或 `video/`。
 - `server/.env.example` 是唯一被跟踪的 env 示例文件，只包含占位符。

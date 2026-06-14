@@ -13,7 +13,10 @@ dist/
 *.out.log
 
 .tmp*/
-video/out/
+
+docs/portfolio/
+figma-import/
+video/
 
 .DS_Store
 Thumbs.db

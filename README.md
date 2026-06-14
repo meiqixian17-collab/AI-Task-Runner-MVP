@@ -2,7 +2,7 @@
 
 AI Task Runner 是一个面向个人任务启动与推进的本地 Web 应用。它不追求一次性生成完整计划，而是把用户当前任务拆成一个低阻力、可立刻执行的步骤，并在用户完成、卡住或信息不足时继续推进。
 
-![AI Task Runner 核心任务推进流程](docs/portfolio/assets/06-task-flow.png)
+![AI Task Runner 当前步骤界面](public/portfolio/02-current-step.png)
 
 ## 项目价值
 
@@ -28,7 +28,7 @@ AI Task Runner 是一个面向个人任务启动与推进的本地 Web 应用。
 - Backend: Express
 - AI Provider: DeepSeek API
 - Tests: Node.js scripts, Vite build
-- Demo assets: static screenshots, Remotion flow demo assets
+- Demo assets: static screenshots
 
 ## 项目结构
 
@@ -36,11 +36,9 @@ AI Task Runner 是一个面向个人任务启动与推进的本地 Web 应用。
 ai-task-runner-mvp/
   client/          React + Vite frontend
   server/          Express API and AI provider services
-  docs/            Showcase, architecture, quality and portfolio materials
-  public/          Static screenshots and demo frames used by the app/docs
+  docs/            Showcase, architecture and quality materials
+  public/          Static screenshots used by the app/docs
   scripts/         Capture and render helper scripts
-  video/           Remotion demo compositions
-  figma-import/    Figma import scripts and plugin experiments
 ```
 
 更多架构说明见 [docs/architecture.md](docs/architecture.md)。
@@ -96,13 +94,12 @@ npm run test:all
 
 - 演示脚本：[docs/showcase-script.md](docs/showcase-script.md)
 - 质量清单：[docs/quality-checklist.md](docs/quality-checklist.md)
-- 作品集案例页：[docs/portfolio/ai-task-runner-case-study.html](docs/portfolio/ai-task-runner-case-study.html)
-- 截图素材：[docs/portfolio/assets/](docs/portfolio/assets/)
+- 截图素材：[public/portfolio/](public/portfolio/)
 
 在线 Demo 暂未部署。当前仓库提供本地 Demo、截图和演示脚本；如果要部署，建议先把前端静态页面部署到 Vercel，再把后端部署到支持环境变量的 Node.js 平台。
 
 ## GitHub 发布检查
 
-- `server/.env`、`.env*`、日志、`node_modules/`、`dist/`、`.tmp*/`、`.tmp-screenshots/`、`.tmp-ui-audit/`、`video/out/` 已通过 `.gitignore` 排除。
+- `server/.env`、`.env*`、日志、`node_modules/`、`dist/`、`.tmp*/`、`.tmp-screenshots/`、`.tmp-ui-audit/`、`docs/portfolio/`、`figma-import/`、`video/` 已通过 `.gitignore` 排除。
 - `server/.env.example` 只包含占位符，可以提交。
 - 提交前运行 `git status --short --ignored`，确认脏文件只出现在 ignored 列表中。
