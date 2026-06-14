@@ -1,0 +1,13 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AI Task Runner guided node mark">
+  <g fill="none" stroke="currentColor" stroke-linecap="round">
+    <path d="M29 69 Q38 51 50 50" stroke-width="3"/>
+    <path d="M50 50 Q62 42 71 31" stroke-width="3"/>
+    <path d="M36 35 Q43 46 50 50" stroke-width="2" opacity=".45"/>
+    <path d="M50 50 Q62 60 69 67" stroke-width="2" opacity=".32"/>
+  </g>
+  <circle cx="29" cy="69" r="6" fill="currentColor"/>
+  <circle cx="50" cy="50" r="8" fill="currentColor"/>
+  <circle cx="71" cy="31" r="6" fill="currentColor"/>
+  <circle cx="36" cy="35" r="3" fill="currentColor" opacity=".45"/>
+  <circle cx="69" cy="67" r="3" fill="currentColor" opacity=".32"/>
+</svg>

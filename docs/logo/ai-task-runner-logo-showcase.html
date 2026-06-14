@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Task Runner - Logo Exploration</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #171717;
+      --muted: #696969;
+      --paper: #f8f7f4;
+      --line: rgba(23, 23, 23, .12);
+      --panel: rgba(255, 255, 255, .62);
+      --accent: #2f5f54;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 18% 8%, rgba(47, 95, 84, .12), transparent 28rem),
+        linear-gradient(180deg, #fbfaf7 0%, var(--paper) 52%, #eeece6 100%);
+    }
+
+    main {
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 72px 0 64px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 32px;
+      align-items: end;
+      margin-bottom: 48px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 32px;
+    }
+
+    .eyebrow {
+      margin: 0 0 16px;
+      font-size: 12px;
+      line-height: 1.4;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 760px;
+      font-size: clamp(44px, 7vw, 86px);
+      line-height: .94;
+      letter-spacing: 0;
+      font-weight: 520;
+    }
+
+    .brief {
+      max-width: 480px;
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.7;
+    }
+
+    .wordmark {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .52);
+      white-space: nowrap;
+    }
+
+    .wordmark svg {
+      width: 38px;
+      height: 38px;
+      color: var(--accent);
+    }
+
+    .wordmark strong {
+      display: block;
+      font-size: 17px;
+      letter-spacing: -.01em;
+    }
+
+    .wordmark span {
+      display: block;
+      margin-top: 2px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .card {
+      min-height: 390px;
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .mark-area {
+      height: 176px;
+      display: grid;
+      place-items: center;
+      color: var(--ink);
+    }
+
+    .mark-area svg {
+      width: 124px;
+      height: 124px;
+      transition: transform .24s ease, color .24s ease;
+    }
+
+    .card:hover .mark-area svg {
+      color: var(--accent);
+      transform: translateY(-3px);
+    }
+
+    .meta {
+      margin-top: 28px;
+    }
+
+    .meta h2 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      font-weight: 560;
+      letter-spacing: 0;
+    }
+
+    .meta p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .tag {
+      display: inline-flex;
+      margin-bottom: 16px;
+      color: var(--accent);
+      font-size: 11px;
+      line-height: 1;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .notes {
+      margin-top: 24px;
+      padding: 20px 24px;
+      border-left: 3px solid var(--accent);
+      color: var(--muted);
+      background: rgba(255, 255, 255, .45);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    a {
+      color: inherit;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    @media (max-width: 920px) {
+      header {
+        grid-template-columns: 1fr;
+      }
+
+      .wordmark {
+        width: fit-content;
+      }
+
+      .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      main {
+        width: min(100% - 28px, 1180px);
+        padding-top: 44px;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .card {
+        min-height: 340px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <section>
+        <p class="eyebrow">Logo exploration / AI product experience MVP</p>
+        <h1>AI Task Runner</h1>
+        <p class="brief">A restrained logo set for a product that turns stuck tasks into a clear current step, with room for clarification and recovery.</p>
+      </section>
+      <aside class="wordmark" aria-label="Recommended lockup preview">
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="25" y="25" width="50" height="50" rx="14" stroke-width="4"/>
+            <path d="M38 58 L49 47 L58 56 L68 38" stroke-width="4"/>
+          </g>
+          <circle cx="68" cy="38" r="5" fill="currentColor"/>
+        </svg>
+        <div>
+          <strong>AI Task Runner</strong>
+          <span>From stuck to current step</span>
+        </div>
+      </aside>
+    </header>
+
+    <section class="grid" aria-label="Logo variants">
+      <article class="card">
+        <div class="mark-area">
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Current step mark">
+            <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="25" y="25" width="50" height="50" rx="14" stroke-width="4"/>
+              <path d="M38 58 L49 47 L58 56 L68 38" stroke-width="4"/>
+            </g>
+            <circle cx="68" cy="38" r="5" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="meta">
+          <span class="tag">01 / Recommended</span>
+          <h2>Current Step Mark</h2>
+          <p>A StepCard-like container with one resolved action path. It is the clearest app icon direction because it stays close to the product behavior.</p>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="mark-area">
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Low friction path mark">
+            <g fill="currentColor">
+              <rect x="21" y="61" width="15" height="7" rx="3.5" transform="rotate(-38 28.5 64.5)"/>
+              <rect x="33" y="50" width="18" height="8" rx="4" transform="rotate(-24 42 54)"/>
+              <rect x="47" y="43" width="20" height="9" rx="4.5" transform="rotate(-8 57 47.5)"/>
+              <rect x="63" y="42" width="16" height="7" rx="3.5" transform="rotate(14 71 45.5)" opacity=".72"/>
+              <circle cx="77" cy="53" r="3.5" opacity=".48"/>
+            </g>
+            <path d="M25 69 C38 52 55 42 77 45" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" opacity=".28"/>
+          </svg>
+        </div>
+        <div class="meta">
+          <span class="tag">02 / Motion</span>
+          <h2>Low Friction Path</h2>
+          <p>Capsules form a soft upward route, representing lower resistance and immediate movement without implying full automation.</p>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="mark-area">
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Resistance recovery mark">
+            <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M25 58 C35 38 50 38 55 50 C58 58 51 64 43 59" stroke-width="4"/>
+              <path d="M54 50 C63 35 76 35 78 48 C80 62 66 69 55 61" stroke-width="4" opacity=".45"/>
+              <path d="M44 70 C52 60 61 57 73 61" stroke-width="3"/>
+            </g>
+            <circle cx="44" cy="70" r="4.5" fill="currentColor"/>
+            <circle cx="73" cy="61" r="4.5" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="meta">
+          <span class="tag">03 / Recovery</span>
+          <h2>Resistance Recovery</h2>
+          <p>A blocked loop opens into a smaller fallback path. This direction foregrounds the product's stuck-state recovery behavior.</p>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="mark-area">
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Step card grid mark">
+            <defs>
+              <clipPath id="card-clip-inline">
+                <rect x="24" y="22" width="52" height="56" rx="14"/>
+              </clipPath>
+            </defs>
+            <rect x="24" y="22" width="52" height="56" rx="14" fill="none" stroke="currentColor" stroke-width="3"/>
+            <g clip-path="url(#card-clip-inline)" fill="currentColor">
+              <circle cx="38" cy="36" r="3"/>
+              <circle cx="50" cy="36" r="3"/>
+              <circle cx="62" cy="36" r="3"/>
+              <circle cx="38" cy="48" r="3"/>
+              <circle cx="50" cy="48" r="3"/>
+              <circle cx="38" cy="60" r="3"/>
+              <circle cx="50" cy="60" r="3"/>
+              <circle cx="62" cy="60" r="3"/>
+              <circle cx="62" cy="48" r="5"/>
+            </g>
+            <path d="M57 48 H67" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="meta">
+          <span class="tag">04 / Interface</span>
+          <h2>Step Card Grid</h2>
+          <p>A modular task card with one emphasized current step. It reads more UI-native and can pair well with portfolio screenshots.</p>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="mark-area">
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Context loop mark">
+            <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M50 18 A32 32 0 1 1 20 61" stroke-width="4"/>
+              <path d="M50 82 A32 32 0 0 1 80 39" stroke-width="4" opacity=".42"/>
+              <path d="M39 51 L49 61 L65 42" stroke-width="4"/>
+            </g>
+            <circle cx="50" cy="18" r="4.5" fill="currentColor"/>
+            <circle cx="20" cy="61" r="4.5" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="meta">
+          <span class="tag">05 / Loop</span>
+          <h2>Context Loop</h2>
+          <p>A partial loop with a resolved check, pointing to short-term context, confirmation, and progress without pretending to be a full planner.</p>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="mark-area">
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Guided node mark">
+            <g fill="none" stroke="currentColor" stroke-linecap="round">
+              <path d="M29 69 Q38 51 50 50" stroke-width="3"/>
+              <path d="M50 50 Q62 42 71 31" stroke-width="3"/>
+              <path d="M36 35 Q43 46 50 50" stroke-width="2" opacity=".45"/>
+              <path d="M50 50 Q62 60 69 67" stroke-width="2" opacity=".32"/>
+            </g>
+            <circle cx="29" cy="69" r="6" fill="currentColor"/>
+            <circle cx="50" cy="50" r="8" fill="currentColor"/>
+            <circle cx="71" cy="31" r="6" fill="currentColor"/>
+            <circle cx="36" cy="35" r="3" fill="currentColor" opacity=".45"/>
+            <circle cx="69" cy="67" r="3" fill="currentColor" opacity=".32"/>
+          </svg>
+        </div>
+        <div class="meta">
+          <span class="tag">06 / Guidance</span>
+          <h2>Guided Node</h2>
+          <p>A small decision network with one dominant current node. It is the most AI-coded direction, but still grounded in guidance rather than autonomy.</p>
+        </div>
+      </article>
+    </section>
+
+    <section class="notes">
+      Suggested first direction: use <a href="01-current-step-mark.svg">01-current-step-mark.svg</a> as the app icon and product mark. It has the strongest link to the StepCard interaction surface and scales cleanly as a favicon. After direction selection, export the chosen SVG to PNG and build final light/dark lockups.
+    </section>
+  </main>
+</body>
+</html>

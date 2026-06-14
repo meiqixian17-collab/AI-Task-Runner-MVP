@@ -1,0 +1,38 @@
+{
+  "name": "ai-task-runner-mvp",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "dev:client": "npm --prefix client run dev",
+    "dev:server": "npm --prefix server run dev",
+    "build": "npm --prefix client run build",
+    "test:resistance": "npm --prefix client run test:resistance",
+    "test:quality": "npm --prefix client run test:quality",
+    "test:duplicate": "npm --prefix client run test:duplicate",
+    "test:duplicate-retry": "npm --prefix client run test:duplicate-retry",
+    "test:prompt": "npm --prefix server run test:prompt",
+    "test:completion": "npm --prefix client run test:completion",
+    "test:completion-model": "npm --prefix client run test:completion-model",
+    "test:completion-checkpoint": "npm --prefix client run test:completion-checkpoint",
+    "test:simple": "npm --prefix client run test:simple",
+    "test:immediate": "npm --prefix client run test:immediate",
+    "test:all": "npm run build && npm run test:simple && npm run test:immediate && npm run test:duplicate && npm run test:duplicate-retry && npm run test:prompt && npm run test:completion-model && npm run test:completion && npm run test:completion-checkpoint && npm run test:quality && npm run test:resistance",
+    "video:studio": "remotion studio video/index.jsx",
+    "video:still": "remotion still video/index.jsx AiTaskRunnerIntro video/out/ai-task-runner-intro-frame.png --frame=150 --scale=0.5",
+    "video:render": "remotion render video/index.jsx AiTaskRunnerIntro video/out/ai-task-runner-intro.mp4",
+    "video:flow:capture": "node scripts/capture-flow-demo.mjs",
+    "video:flow:still": "remotion still video/index.jsx AiTaskRunnerFlowDemo video/out/ai-task-runner-flow-demo-frame.png --frame=150 --scale=0.5",
+    "video:flow:render": "remotion render video/index.jsx AiTaskRunnerFlowDemo video/out/ai-task-runner-flow-demo.mp4",
+    "video:flow:v2:capture": "node scripts/capture-flow-demo-v2.mjs",
+    "video:flow:v2:still": "node scripts/render-flow-demo-v2-stills.mjs",
+    "video:flow:v2:render": "remotion render video/index.jsx AiTaskRunnerFlowDemoV2 video/out/ai-task-runner-flow-demo-v2.mp4"
+  },
+  "devDependencies": {
+    "@remotion/cli": "^4.0.476",
+    "concurrently": "^8.2.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.476"
+  }
+}
