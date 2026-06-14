@@ -1,4 +1,9 @@
 const REQUEST_TIMEOUT_MS = 12000;
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+
+function apiUrl(path) {
+  return `${API_BASE_URL}${path}`;
+}
 
 async function requestJson(url, options) {
   const controller = new AbortController();
@@ -52,7 +57,7 @@ export function generateFirstStep(taskInput) {
   const payload =
     taskInput && typeof taskInput === "object" ? taskInput : { task: taskInput };
 
-  return requestJson("/api/generate-first-step", {
+  return requestJson(apiUrl("/api/generate-first-step"), {
     method: "POST",
     body: JSON.stringify(payload)
   });
@@ -64,21 +69,21 @@ export function generateNextStep(taskInput, stepHistory) {
       ? { ...taskInput, stepHistory }
       : { task: taskInput, stepHistory };
 
-  return requestJson("/api/generate-next-step", {
+  return requestJson(apiUrl("/api/generate-next-step"), {
     method: "POST",
     body: JSON.stringify(payload)
   });
 }
 
 export function diagnoseResistance(context) {
-  return requestJson("/api/diagnose-resistance", {
+  return requestJson(apiUrl("/api/diagnose-resistance"), {
     method: "POST",
     body: JSON.stringify({ context })
   });
 }
 
 export function planResistanceRecovery(context, diagnosis) {
-  return requestJson("/api/plan-recovery", {
+  return requestJson(apiUrl("/api/plan-recovery"), {
     method: "POST",
     body: JSON.stringify({ context, diagnosis })
   });
@@ -90,7 +95,7 @@ export function generateResistanceFallbackStep({
   recoveryPlan,
   validationFeedback
 }) {
-  return requestJson("/api/generate-fallback-step", {
+  return requestJson(apiUrl("/api/generate-fallback-step"), {
     method: "POST",
     body: JSON.stringify({
       context,
@@ -102,7 +107,7 @@ export function generateResistanceFallbackStep({
 }
 
 export function resolveResistanceWithAi(context) {
-  return requestJson("/api/resolve-resistance", {
+  return requestJson(apiUrl("/api/resolve-resistance"), {
     method: "POST",
     body: JSON.stringify({ context })
   });

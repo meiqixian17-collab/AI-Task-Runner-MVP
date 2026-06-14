@@ -4,6 +4,12 @@ AI Task Runner 是一个面向个人任务启动与推进的本地 Web 应用。
 
 ![AI Task Runner 当前步骤界面](public/portfolio/02-current-step.png)
 
+Live Demo: https://your-vercel-app.vercel.app
+
+Backend Health: https://your-backend-url.onrender.com/api/health
+
+线上 Demo 的 AI Key 仅配置在后端部署平台环境变量中，不进入前端和 GitHub 仓库。
+
 ## 项目价值
 
 很多 AI 工具会给用户一份完整计划，但真正卡住的地方通常是“现在到底先做哪一步”。这个项目把 AI 放进任务执行闭环里，重点处理三件事：
@@ -57,6 +63,7 @@ npm --prefix server install
 
 ```bash
 cp server/.env.example server/.env
+cp client/.env.example client/.env
 ```
 
 然后在 `server/.env` 填入真实 API key：
@@ -66,7 +73,16 @@ DEEPSEEK_API_KEY=your_deepseek_api_key_here
 DEEPSEEK_API_URL=https://api.deepseek.com/chat/completions
 DEEPSEEK_MODEL=deepseek-chat
 PORT=3001
+CLIENT_ORIGIN=http://localhost:5173
 ```
+
+本地 `client/.env` 可保持为空：
+
+```env
+VITE_API_BASE_URL=
+```
+
+空值表示前端继续请求相对路径 `/api/...`，由 Vite proxy 转发到本地后端。
 
 启动开发环境：
 
@@ -90,16 +106,52 @@ npm run test:all
 
 当前验证记录见 [docs/verification.md](docs/verification.md)。
 
+## 在线部署
+
+本项目按前后端分离部署：
+
+- Frontend: Vercel
+- Backend: Render
+- AI Key: 只放在 Render 环境变量，不放入 Vercel、前端代码或 GitHub 仓库
+
+Vercel 配置：
+
+```txt
+Build Command: npm --prefix client install && npm --prefix client run build
+Output Directory: client/dist
+Environment Variables:
+  VITE_API_BASE_URL=https://your-backend-url.onrender.com
+```
+
+`VITE_API_BASE_URL` 只保存后端 URL。不要在 Vite 前端变量中配置 `DEEPSEEK_API_KEY`，因为 `VITE_*` 变量会被打包进前端资源。
+
+Render 配置：
+
+```txt
+Root Directory: server
+Build Command: npm install
+Start Command: npm start
+Environment Variables:
+  DEEPSEEK_API_KEY=your_real_key
+  DEEPSEEK_API_URL=https://api.deepseek.com/chat/completions
+  DEEPSEEK_MODEL=deepseek-chat
+  NODE_ENV=production
+  CLIENT_ORIGIN=https://your-vercel-app.vercel.app
+```
+
+`PORT` 由 Render 自动注入；本地开发时默认使用 `3001`。
+
 ## 展示材料
 
 - 演示脚本：[docs/showcase-script.md](docs/showcase-script.md)
 - 质量清单：[docs/quality-checklist.md](docs/quality-checklist.md)
 - 截图素材：[public/portfolio/](public/portfolio/)
 
-在线 Demo 暂未部署。当前仓库提供本地 Demo、截图和演示脚本；如果要部署，建议先把前端静态页面部署到 Vercel，再把后端部署到支持环境变量的 Node.js 平台。
+顶部 Live Demo 和 Backend Health 使用部署占位地址；完成 Vercel 和 Render 部署后替换为真实 URL。当前仓库保留本地 Demo、截图和演示脚本。
 
 ## GitHub 发布检查
 
 - `server/.env`、`.env*`、日志、`node_modules/`、`dist/`、`.tmp*/`、`.tmp-screenshots/`、`.tmp-ui-audit/`、`docs/portfolio/`、`figma-import/`、`public/flow-demo*/`、`video/` 已通过 `.gitignore` 排除。
+- `docs/portfolio/`、`figma-import/`、`video/` 不应进入 Git 跟踪列表；提交前可用 `git ls-files docs/portfolio figma-import video` 确认输出为空。
 - `server/.env.example` 只包含占位符，可以提交。
 - 提交前运行 `git status --short --ignored`，确认脏文件只出现在 ignored 列表中。
