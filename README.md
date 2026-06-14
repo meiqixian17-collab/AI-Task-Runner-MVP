@@ -100,6 +100,6 @@ npm run test:all
 
 ## GitHub 发布检查
 
-- `server/.env`、`.env*`、日志、`node_modules/`、`dist/`、`.tmp*/`、`.tmp-screenshots/`、`.tmp-ui-audit/`、`docs/portfolio/`、`figma-import/`、`video/` 已通过 `.gitignore` 排除。
+- `server/.env`、`.env*`、日志、`node_modules/`、`dist/`、`.tmp*/`、`.tmp-screenshots/`、`.tmp-ui-audit/`、`docs/portfolio/`、`figma-import/`、`public/flow-demo*/`、`video/` 已通过 `.gitignore` 排除。
 - `server/.env.example` 只包含占位符，可以提交。
 - 提交前运行 `git status --short --ignored`，确认脏文件只出现在 ignored 列表中。

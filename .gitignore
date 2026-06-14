@@ -16,6 +16,8 @@ dist/
 
 docs/portfolio/
 figma-import/
+public/flow-demo/
+public/flow-demo-v2/
 video/
 
 .DS_Store
