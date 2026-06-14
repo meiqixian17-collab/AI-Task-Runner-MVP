@@ -111,8 +111,8 @@ npm run test:all
 本项目按前后端分离部署：
 
 - Frontend: Vercel
-- Backend: Render
-- AI Key: 只放在 Render 环境变量，不放入 Vercel、前端代码或 GitHub 仓库
+- Backend: Render 或 Railway
+- AI Key: 只放在后端部署平台环境变量，不放入 Vercel、前端代码或 GitHub 仓库
 
 Vercel 配置：
 
@@ -140,6 +140,22 @@ Environment Variables:
 ```
 
 `PORT` 由 Render 自动注入；本地开发时默认使用 `3001`。
+
+Railway 配置：
+
+```txt
+Build Command: npm --prefix server install
+Start Command: npm --prefix server start
+Healthcheck Path: /api/health
+Environment Variables:
+  DEEPSEEK_API_KEY=your_real_key
+  DEEPSEEK_API_URL=https://api.deepseek.com/chat/completions
+  DEEPSEEK_MODEL=deepseek-chat
+  NODE_ENV=production
+  CLIENT_ORIGIN=https://your-vercel-app.vercel.app
+```
+
+如果 Render 要求绑定银行卡，可以改用 Railway。仓库根目录的 `railway.json` 已固定后端构建、启动和健康检查命令，避免 Railway 在仓库根目录找不到 `start` 脚本。
 
 ## 展示材料
 
