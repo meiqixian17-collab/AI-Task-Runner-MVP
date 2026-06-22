@@ -1,19 +1,3 @@
----
-title: "AI Task Runner"
-summary: "一个围绕“当前一步”设计的 AI 任务推进体验 MVP，帮助用户从模糊目标回到具体、低阻力、可执行的下一个动作。"
-year: 2026
-role: "产品负责人"
-type: "个人项目"
-status: "MVP 阶段"
-cover: "/covers/ai-task-runner.png"
-tags:
-  - AI 产品体验
-  - 任务流程
-  - 交互原型
-featured: true
----
-
-import { DecisionNote, EvidenceBlock } from '../../components/case-study';
 
 ## 项目概览
 
