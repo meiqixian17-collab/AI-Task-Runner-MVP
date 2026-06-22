@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Task Runner README Cover</title>
+    <style>
+      :root {
+        --ink: #221915;
+        --muted: #695c51;
+        --paper: #fbf7ed;
+        --paper-strong: #fffdf7;
+        --line: #dac7a9;
+        --rust: #a85e17;
+        --green: #146b52;
+        --blue: #263f5c;
+        --charcoal: #191613;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: "Noto Serif SC", "Songti SC", "Microsoft YaHei", serif;
+      }
+
+      .cover {
+        position: relative;
+        display: grid;
+        grid-template-columns: 0.9fr 0.84fr;
+        width: 1600px;
+        height: 900px;
+        overflow: hidden;
+        background:
+          linear-gradient(90deg, rgba(25, 22, 19, 0.05) 1px, transparent 1px),
+          linear-gradient(0deg, rgba(25, 22, 19, 0.05) 1px, transparent 1px),
+          linear-gradient(135deg, #fff9ed 0%, #f6ead7 42%, #e9dcc8 100%);
+        background-size: 72px 72px, 72px 72px, auto;
+      }
+
+      .cover::before {
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(118deg, rgba(25, 22, 19, 0) 0 57%, rgba(25, 22, 19, 0.92) 57.2% 100%),
+          linear-gradient(90deg, rgba(168, 94, 23, 0.08), rgba(20, 107, 82, 0.08));
+        content: "";
+      }
+
+      .cover::after {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        width: 58%;
+        height: 100%;
+        background:
+          repeating-linear-gradient(
+            -18deg,
+            rgba(255, 253, 247, 0.08) 0,
+            rgba(255, 253, 247, 0.08) 2px,
+            transparent 2px,
+            transparent 18px
+          );
+        content: "";
+        mix-blend-mode: screen;
+        opacity: 0.45;
+      }
+
+      .left {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        align-content: space-between;
+        padding: 78px 64px 68px 84px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        width: fit-content;
+        border: 1px solid rgba(168, 94, 23, 0.34);
+        border-radius: 999px;
+        background: rgba(255, 253, 247, 0.62);
+        color: var(--rust);
+        padding: 8px 14px;
+        font-family: "Microsoft YaHei", sans-serif;
+        font-size: 20px;
+        font-weight: 700;
+        line-height: 1;
+      }
+
+      h1 {
+        max-width: 720px;
+        margin: 34px 0 0;
+        font-size: 104px;
+        font-weight: 900;
+        line-height: 0.96;
+        letter-spacing: 0;
+      }
+
+      .subtitle {
+        max-width: 620px;
+        margin: 34px 0 0;
+        color: var(--muted);
+        font-family: "Microsoft YaHei", sans-serif;
+        font-size: 32px;
+        font-weight: 700;
+        line-height: 1.48;
+      }
+
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+        width: 710px;
+        margin-top: 52px;
+      }
+
+      .flow-item {
+        min-height: 128px;
+        border: 1px solid rgba(218, 199, 169, 0.95);
+        border-radius: 10px;
+        background: rgba(255, 253, 247, 0.72);
+        padding: 16px 14px;
+      }
+
+      .flow-item strong {
+        display: block;
+        color: var(--ink);
+        font-family: "Microsoft YaHei", sans-serif;
+        font-size: 24px;
+        font-weight: 800;
+        line-height: 1.2;
+      }
+
+      .flow-item span {
+        display: block;
+        margin-top: 10px;
+        color: var(--muted);
+        font-family: "Microsoft YaHei", sans-serif;
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1.46;
+      }
+
+      .proof-line {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        color: var(--blue);
+        font-family: "Microsoft YaHei", sans-serif;
+        font-size: 20px;
+        font-weight: 800;
+      }
+
+      .proof-line::before {
+        width: 58px;
+        height: 4px;
+        background: var(--green);
+        content: "";
+      }
+
+      .right {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        place-items: center;
+        padding: 62px 82px 62px 10px;
+      }
+
+      .poster-board {
+        position: relative;
+        width: 560px;
+        height: 760px;
+      }
+
+      .poster-board::before {
+        position: absolute;
+        inset: 44px -36px -24px 54px;
+        border: 1px solid rgba(255, 253, 247, 0.26);
+        content: "";
+        transform: rotate(-3deg);
+      }
+
+      .phone {
+        position: absolute;
+        inset: 0 auto auto 72px;
+        width: 372px;
+        height: 778px;
+        overflow: hidden;
+        border: 10px solid #10100e;
+        border-radius: 42px;
+        background: #fbf7ed;
+        box-shadow:
+          0 42px 80px rgba(0, 0, 0, 0.36),
+          0 0 0 1px rgba(255, 255, 255, 0.18);
+        transform: rotate(-4deg);
+      }
+
+      .phone img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .note {
+        position: absolute;
+        right: -6px;
+        bottom: 68px;
+        width: 266px;
+        border: 1px solid rgba(255, 253, 247, 0.22);
+        border-radius: 12px;
+        background: #fffdf7;
+        box-shadow: 0 22px 42px rgba(0, 0, 0, 0.22);
+        padding: 22px;
+        transform: rotate(3deg);
+      }
+
+      .note span {
+        color: var(--rust);
+        font-family: "Microsoft YaHei", sans-serif;
+        font-size: 15px;
+        font-weight: 900;
+        line-height: 1;
+      }
+
+      .note p {
+        margin: 12px 0 0;
+        color: var(--ink);
+        font-family: "Microsoft YaHei", sans-serif;
+        font-size: 24px;
+        font-weight: 900;
+        line-height: 1.35;
+      }
+
+      .tag-strip {
+        position: absolute;
+        top: 46px;
+        right: -18px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .tag-strip div {
+        width: fit-content;
+        border: 1px solid rgba(255, 253, 247, 0.24);
+        border-radius: 999px;
+        background: rgba(255, 253, 247, 0.12);
+        color: #fffdf7;
+        padding: 9px 13px;
+        font-family: "Microsoft YaHei", sans-serif;
+        font-size: 15px;
+        font-weight: 800;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="cover" aria-label="AI Task Runner README product poster">
+      <section class="left">
+        <div>
+          <div class="eyebrow">AI PRODUCT EXPERIENCE MVP</div>
+          <h1>AI Task Runner</h1>
+          <p class="subtitle">
+            把“不知道怎么开始”转成当前可执行的一步，并在完成、澄清和卡住时继续推进。
+          </p>
+
+          <div class="flow" aria-label="core flow">
+            <div class="flow-item">
+              <strong>输入任务</strong>
+              <span>从模糊目标进入执行场景</span>
+            </div>
+            <div class="flow-item">
+              <strong>当前一步</strong>
+              <span>只突出一个低阻力动作</span>
+            </div>
+            <div class="flow-item">
+              <strong>完成推进</strong>
+              <span>基于历史自然生成下一步</span>
+            </div>
+            <div class="flow-item">
+              <strong>卡住恢复</strong>
+              <span>把动作降到可重新开始</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="proof-line">React + Vite / Express / DeepSeek API / localStorage</div>
+      </section>
+
+      <section class="right" aria-label="current step interface preview">
+        <div class="poster-board">
+          <div class="tag-strip" aria-hidden="true">
+            <div>StepCard</div>
+            <div>Clarify</div>
+            <div>Recovery</div>
+          </div>
+          <div class="phone">
+            <img
+              src="../../public/portfolio/02-current-step.png"
+              alt="AI Task Runner 当前一步界面"
+            />
+          </div>
+          <aside class="note">
+            <span>DESIGN FOCUS</span>
+            <p>不是完整计划，而是此刻能开始的动作。</p>
+          </aside>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

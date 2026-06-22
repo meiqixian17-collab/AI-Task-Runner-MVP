@@ -26,7 +26,9 @@
     "video:flow:render": "remotion render video/index.jsx AiTaskRunnerFlowDemo video/out/ai-task-runner-flow-demo.mp4",
     "video:flow:v2:capture": "node scripts/capture-flow-demo-v2.mjs",
     "video:flow:v2:still": "node scripts/render-flow-demo-v2-stills.mjs",
-    "video:flow:v2:render": "remotion render video/index.jsx AiTaskRunnerFlowDemoV2 video/out/ai-task-runner-flow-demo-v2.mp4"
+    "video:flow:v2:render": "remotion render video/index.jsx AiTaskRunnerFlowDemoV2 video/out/ai-task-runner-flow-demo-v2.mp4",
+    "portfolio:capture": "node scripts/capture-portfolio-previews.mjs",
+    "readme:cover": "node scripts/render-readme-cover.mjs"
   },
   "devDependencies": {
     "@remotion/cli": "^4.0.476",

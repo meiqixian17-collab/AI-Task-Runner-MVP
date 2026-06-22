@@ -1,56 +1,25 @@
 import { spawn } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  rmSync,
-  writeFileSync
-} from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
-const outputDir = path.join(repoRoot, "public", "portfolio");
-const baseUrl =
-  process.env.PORTFOLIO_PREVIEW_BASE_URL || "http://127.0.0.1:5173";
-const viewport = { width: 430, height: 900, deviceScaleFactor: 1 };
-
-const captures = [
-  { state: "idle", file: "01-task-entry.png" },
-  { state: "ready", file: "02-current-step.png" },
-  { state: "executing", file: "03-stepcard-executing.png" },
-  { state: "clarification", file: "04-clarification.png" },
-  { state: "recovery", file: "05-resistance-recovery.png" }
-];
-
-const obsoleteFiles = new Set(["04-resistance-recovery.png", "05-clarification.png"]);
+const sourceFile = path.join(repoRoot, "docs", "readme-cover", "ai-task-runner-cover.html");
+const outputFile = path.join(repoRoot, "public", "portfolio", "ai-task-runner-cover.png");
+const viewport = { width: 1600, height: 900, deviceScaleFactor: 1 };
 
 function findChromiumExecutables() {
   const candidates = [
     { label: "custom Chromium", path: process.env.CHROME_PATH },
-    {
-      label: "Edge",
-      path: "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
-    },
-    {
-      label: "Edge",
-      path: "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe"
-    },
-    {
-      label: "Chrome",
-      path: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
-    },
-    {
-      label: "Chrome",
-      path: "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"
-    }
+    { label: "Edge", path: "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" },
+    { label: "Edge", path: "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe" },
+    { label: "Chrome", path: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" },
+    { label: "Chrome", path: "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe" }
   ].filter((candidate) => candidate.path && existsSync(candidate.path));
 
   if (candidates.length === 0) {
-    throw new Error(
-      "Chrome or Edge was not found. Set CHROME_PATH to a Chromium executable."
-    );
+    throw new Error("Chrome or Edge was not found. Set CHROME_PATH to a Chromium executable.");
   }
 
   return candidates;
@@ -175,47 +144,11 @@ function createCdpClient(webSocketUrl) {
   return { close, once, send, waitForOpen };
 }
 
-async function waitForPreviewPage(cdp, state) {
-  const expectedState = JSON.stringify(state);
-
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    try {
-      const result = await cdp.send("Runtime.evaluate", {
-        expression: `document.readyState === "complete" && document.querySelector("[data-portfolio-preview]")?.dataset.portfolioPreview === ${expectedState}`,
-        returnByValue: true
-      });
-
-      if (result.result?.value === true) {
-        return;
-      }
-    } catch {
-      // The page may be between navigations.
-    }
-
-    await sleep(150);
-  }
-
-  throw new Error(`Preview page did not become ready for state "${state}".`);
-}
-
 function safeRm(targetPath) {
   try {
     rmSync(targetPath, { force: true, recursive: true, maxRetries: 3 });
   } catch {
-    // Chromium can keep profile files locked briefly after exit. The profile path
-    // is run-scoped and can be cleaned by the next successful capture.
-  }
-}
-
-function cleanLegacyPortfolioImages() {
-  if (!existsSync(outputDir)) {
-    return;
-  }
-
-  for (const fileName of readdirSync(outputDir)) {
-    if (fileName.startsWith("state-preview-") || obsoleteFiles.has(fileName)) {
-      safeRm(path.join(outputDir, fileName));
-    }
+    // Chromium can keep profile files locked briefly after exit.
   }
 }
 
@@ -236,6 +169,7 @@ function launchBrowser(browser, debugPort, userDataDir) {
       "--no-first-run",
       "--no-default-browser-check",
       "--hide-scrollbars",
+      "--allow-file-access-from-files",
       `--remote-debugging-port=${debugPort}`,
       `--user-data-dir=${userDataDir}`,
       "about:blank"
@@ -248,25 +182,38 @@ function launchBrowser(browser, debugPort, userDataDir) {
 
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (chunk) => {
-    if (!/ERROR:/.test(chunk)) {
-      return;
+    if (/ERROR:/.test(chunk)) {
+      process.stderr.write(chunk);
     }
-
-    process.stderr.write(chunk);
   });
 
   return child;
 }
 
-async function captureAll(browser) {
+async function waitForCoverReady(cdp) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const result = await cdp.send("Runtime.evaluate", {
+      expression:
+        "document.readyState === 'complete' && Array.from(document.images).every((image) => image.complete && image.naturalWidth > 0)",
+      returnByValue: true
+    });
+
+    if (result.result?.value === true) {
+      return;
+    }
+
+    await sleep(150);
+  }
+
+  throw new Error("README cover did not become ready.");
+}
+
+async function renderWithBrowser(browser) {
   const debugPort =
-    Number(process.env.PORTFOLIO_CAPTURE_DEBUG_PORT) ||
-    9200 + Math.floor(Math.random() * 600);
+    Number(process.env.README_COVER_DEBUG_PORT) ||
+    9800 + Math.floor(Math.random() * 600);
   const safeLabel = browser.label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-  const userDataDir = path.join(
-    repoRoot,
-    `.tmp-portfolio-browser-profile-${process.pid}-${safeLabel}`
-  );
+  const userDataDir = path.join(repoRoot, `.tmp-readme-cover-profile-${process.pid}-${safeLabel}`);
   const child = launchBrowser(browser, debugPort, userDataDir);
   let cdp = null;
 
@@ -281,30 +228,23 @@ async function captureAll(browser) {
       mobile: false
     });
 
-    for (const capture of captures) {
-      const outputFile = path.join(outputDir, capture.file);
-      const loadEvent = cdp.once("Page.loadEventFired").catch(() => null);
-      await cdp.send("Page.navigate", {
-        url: `${baseUrl}/portfolio-preview?state=${capture.state}`
-      });
-      await loadEvent;
-      await waitForPreviewPage(cdp, capture.state);
-      await sleep(250);
+    const loadEvent = cdp.once("Page.loadEventFired").catch(() => null);
+    await cdp.send("Page.navigate", {
+      url: pathToFileURL(sourceFile).href
+    });
+    await loadEvent;
+    await waitForCoverReady(cdp);
+    await sleep(250);
 
-      const screenshot = await cdp.send("Page.captureScreenshot", {
-        captureBeyondViewport: false,
-        fromSurface: true,
-        format: "png"
-      });
+    const screenshot = await cdp.send("Page.captureScreenshot", {
+      captureBeyondViewport: false,
+      fromSurface: true,
+      format: "png"
+    });
 
-      writeFileSync(outputFile, Buffer.from(screenshot.data, "base64"));
-      console.log(
-        `captured ${capture.state} with ${browser.label}: ${path.relative(
-          repoRoot,
-          outputFile
-        )}`
-      );
-    }
+    mkdirSync(path.dirname(outputFile), { recursive: true });
+    writeFileSync(outputFile, Buffer.from(screenshot.data, "base64"));
+    console.log(`rendered README cover with ${browser.label}: ${path.relative(repoRoot, outputFile)}`);
   } finally {
     if (cdp) {
       cdp.close();
@@ -318,21 +258,20 @@ async function captureAll(browser) {
   }
 }
 
-mkdirSync(outputDir, { recursive: true });
-cleanLegacyPortfolioImages();
+if (!existsSync(sourceFile)) {
+  throw new Error(`Missing README cover source: ${sourceFile}`);
+}
 
 let lastError = null;
 
 for (const browser of findChromiumExecutables()) {
   try {
-    await captureAll(browser);
+    await renderWithBrowser(browser);
     process.exit(0);
   } catch (error) {
     lastError = error;
-    console.warn(
-      `${browser.label} failed: ${error.message}. Trying next Chromium browser.`
-    );
+    console.warn(`${browser.label} failed: ${error.message}. Trying next Chromium browser.`);
   }
 }
 
-throw lastError || new Error("Unable to capture portfolio previews.");
+throw lastError || new Error("Unable to render README cover.");
