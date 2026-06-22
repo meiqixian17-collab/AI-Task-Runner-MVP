@@ -4,7 +4,7 @@
 
 AI Task Runner 是一个面向个人任务启动与推进的 AI 产品体验 MVP。它不先生成一整套计划，而是把用户当前任务收敛成一个低阻力、可立刻执行的步骤，并在用户完成、卡住或信息不足时继续推进。
 
-[项目详情](docs/case-study.md) · [Architecture](docs/architecture.md) · [Verification](docs/verification.md)
+[项目详情](docs/case-study.md) · [Architecture](docs/architecture.md) 
 
 ## 项目定位
 
