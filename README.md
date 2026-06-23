@@ -114,17 +114,3 @@ npm run portfolio:capture
 npm run readme:cover
 ```
 
-`portfolio:capture` 需要先启动前端页面；默认从 `http://127.0.0.1:5173/portfolio-preview` 捕获 5 张关键流程图。当前验证记录见 [docs/verification.md](docs/verification.md)。
-
-## 部署边界
-
-本项目支持前后端分离部署：前端可部署到 Vercel，后端可部署到 Render 或 Railway。真实 AI Key 只应放在后端部署平台环境变量中，不进入前端代码、Vite 变量或 GitHub 仓库。
-
-当前 README 不放线上 Demo 链接；只有在部署地址经过重新验证后，再把真实 URL 加入这里。
-
-## 仓库边界
-
-- `server/.env`、`.env*`、日志、`node_modules/`、`dist/`、`.tmp*/` 和 `video/out/` 不应提交。
-- `server/.env.example` 和 `client/.env.example` 只包含占位符，可以提交。
-- `public/portfolio/` 只保留 README 和 Case Study 需要的当前展示资产。
-- 当前 README 不引用仓库中的旧视频产物；如果后续需要视频，应重新生成并单独验片后再接入。
